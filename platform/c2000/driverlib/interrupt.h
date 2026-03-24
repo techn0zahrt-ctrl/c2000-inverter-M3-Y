@@ -528,9 +528,12 @@ Interrupt_disable(uint32_t interruptNumber);
 // Extern compiler intrinsic prototypes. See compiler User's Guide for details.
 //
 //*****************************************************************************
+//extern uint16_t __disable_interrupts(void);
+//extern uint16_t __enable_interrupts(void);
+#if defined(__TI_COMPILER_VERSION__) && __TI_COMPILER_VERSION__ < 21007000
 extern uint16_t __disable_interrupts(void);
 extern uint16_t __enable_interrupts(void);
-
+#endif
 //*****************************************************************************
 //
 // Close the Doxygen group.

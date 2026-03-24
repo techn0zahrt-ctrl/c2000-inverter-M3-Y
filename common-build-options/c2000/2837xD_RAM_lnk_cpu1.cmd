@@ -65,8 +65,10 @@ SECTIONS
 {
    codestart        : > BEGIN,     PAGE = 0
    .text            : >> RAMD0 |  RAMLS0 | RAMLS1 | RAMLS2 | RAMLS3 | RAMLS4 | RAMGS7 | RAMGS8 | RAMGS9 | RAMGS10,   PAGE = 0
-   .cinit           : > RAMM0,     PAGE = 0
-   .switch          : > RAMM0,     PAGE = 0
+//   .cinit           : > RAMM0,     PAGE = 0
+   .cinit           : > RAMGS7,     PAGE = 0
+//   .switch          : > RAMM0,     PAGE = 0
+   .switch          : > RAMGS7,     PAGE = 0
    .reset           : > RESET,     PAGE = 0, TYPE = DSECT /* not used, */
    .stack           : > RAMM1,     PAGE = 1
 
@@ -75,7 +77,8 @@ SECTIONS
    .bss:output      : > RAMLS3,    PAGE = 0
    .init_array      : > RAMM0,     PAGE = 0
    .const           : >> RAMGS2 | RAMGS3 |RAMGS4 | RAMGS5,    PAGE = 1
-   .data            : > RAMLS5,    PAGE = 1
+//   .data            : > RAMLS5,    PAGE = 1
+   .data            : >> RAMLS5 | RAMGS0 | RAMGS1,    PAGE = 1
    .sysmem          : > RAMLS5,    PAGE = 1
 #else
    .pinit           : > RAMM0,     PAGE = 0

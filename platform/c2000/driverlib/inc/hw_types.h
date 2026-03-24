@@ -52,9 +52,10 @@
         __byte_peripheral_32((uint32_t *)(x))
 #define HWREGH(x)                                                             \
         (*((volatile uint16_t *)((uintptr_t)(x))))
+//#define HWREGB(x)                                                             \
+//        __byte((int16_t *)(x),0)
 #define HWREGB(x)                                                             \
-        __byte((int16_t *)(x),0)
-
+        (*((volatile uint8_t *)((uintptr_t)(x))))
 //*****************************************************************************
 //
 // SUCCESS and FAILURE for API return value
