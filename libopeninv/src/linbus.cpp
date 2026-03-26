@@ -16,39 +16,53 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+#ifdef STM32F1
 #include <libopencm3/stm32/dma.h>
 #include <libopencm3/stm32/usart.h>
 #include <libopencm3/stm32/gpio.h>
+#endif
 #include "linbus.h"
+
+#ifdef STM32F1
 
 #define HWINFO_ENTRIES (sizeof(hwInfo) / sizeof(struct HwInfo))
 
 const LinBus::HwInfo LinBus::hwInfo[] =
 {
-   { USART1, DMA_CHANNEL4, DMA_CHANNEL5, GPIOA, GPIO_USART1_TX },
-   { USART2, DMA_CHANNEL7, DMA_CHANNEL6, GPIOA, GPIO_USART2_TX },
-   { USART3, DMA_CHANNEL2, DMA_CHANNEL3, GPIOB, GPIO_USART3_TX },
+   { USART1, DMA1, DMA_CHANNEL4, DMA_CHANNEL5, GPIOA, GPIO_USART1_TX, GPIO_USART1_RX },
+   { USART2, DMA1, DMA_CHANNEL7, DMA_CHANNEL6, GPIOA, GPIO_USART2_TX, GPIO_USART2_RX },
+   { USART3, DMA1, DMA_CHANNEL2, DMA_CHANNEL3, GPIOB, GPIO_USART3_TX, GPIO_USART3_RX },
+   { UART4,  DMA2, DMA_CHANNEL5, DMA_CHANNEL3, GPIOC, GPIO_UART4_TX,  GPIO_UART4_RX  },
 };
 
+/** \brief Create a new LIN bus object but DO NOT configure hardware */
+LinBus::LinBus()
+   : hw(hwInfo), sendBuffer{}, recvBuffer{}
+{
+}
 
-/** \brief Create a new LIN bus object and initialize USART, GPIO and DMA
- * \pre According USART, GPIO and DMA clocks must be enabled
+/** \brief Create a new LIN bus object and initialize USART and DMA
+ * \pre Associated USART, GPIO and DMA clocks must be enabled.
  * \param usart USART base address
  * \param baudrate 9600 or 19200
- *
  */
 LinBus::LinBus(uint32_t usart, int baudrate)
-   : usart(usart)
+   : hw(hwInfo), sendBuffer{}, recvBuffer{}
 {
-   hw = hwInfo;
+   Init(usart, baudrate);
+}
 
+/** \brief Initialise the hardware associated with a previously created LIN bus object */
+void LinBus::Init(uint32_t usart, int baudrate)
+{
    for (uint32_t i = 0; i < HWINFO_ENTRIES; i++)
    {
       if (hw->usart == usart) break;
       hw++;
    }
 
-   gpio_set_mode(hw->port, GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_ALTFN_PUSHPULL, hw->pin);
+   gpio_set_mode(hw->port, GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_ALTFN_PUSHPULL, hw->pintx);
+   gpio_set_mode(hw->port, GPIO_MODE_INPUT, GPIO_CNF_INPUT_FLOAT, hw->pinrx);
 
    usart_set_baudrate(usart, baudrate);
    usart_set_databits(usart, 8);
@@ -60,41 +74,35 @@ LinBus::LinBus(uint32_t usart, int baudrate)
    usart_enable_tx_dma(usart);
    usart_enable_rx_dma(usart);
 
-   dma_channel_reset(DMA1, hw->dmatx);
-   dma_set_read_from_memory(DMA1, hw->dmatx);
-   dma_set_peripheral_address(DMA1, hw->dmatx, (uint32_t)&USART_DR(usart));
-   dma_set_memory_address(DMA1, hw->dmatx, (uint32_t)sendBuffer);
-   dma_set_peripheral_size(DMA1, hw->dmatx, DMA_CCR_PSIZE_8BIT);
-   dma_set_memory_size(DMA1, hw->dmatx, DMA_CCR_MSIZE_8BIT);
-   dma_enable_memory_increment_mode(DMA1, hw->dmatx);
+   dma_channel_reset(hw->dma, hw->dmatx);
+   dma_set_read_from_memory(hw->dma, hw->dmatx);
+   dma_set_peripheral_address(hw->dma, hw->dmatx, (uint32_t)&USART_DR(usart));
+   dma_set_memory_address(hw->dma, hw->dmatx, (uint32_t)sendBuffer);
+   dma_set_peripheral_size(hw->dma, hw->dmatx, DMA_CCR_PSIZE_8BIT);
+   dma_set_memory_size(hw->dma, hw->dmatx, DMA_CCR_MSIZE_8BIT);
+   dma_enable_memory_increment_mode(hw->dma, hw->dmatx);
 
-   dma_channel_reset(DMA1, hw->dmarx);
-   dma_set_peripheral_address(DMA1, hw->dmarx, (uint32_t)&USART_DR(usart));
-   dma_set_peripheral_size(DMA1, hw->dmarx, DMA_CCR_PSIZE_8BIT);
-   dma_set_memory_size(DMA1, hw->dmarx, DMA_CCR_MSIZE_8BIT);
-   dma_enable_memory_increment_mode(DMA1, hw->dmarx);
+   dma_channel_reset(hw->dma, hw->dmarx);
+   dma_set_peripheral_address(hw->dma, hw->dmarx, (uint32_t)&USART_DR(usart));
+   dma_set_peripheral_size(hw->dma, hw->dmarx, DMA_CCR_PSIZE_8BIT);
+   dma_set_memory_size(hw->dma, hw->dmarx, DMA_CCR_MSIZE_8BIT);
+   dma_enable_memory_increment_mode(hw->dma, hw->dmarx);
 
    usart_enable(usart);
 }
 
-/** \brief Send data on LIN bus
- *
- * \param id feature ID
- * \param data payload data, if any
- * \param len length of payload, if any
- *
- */
+/** \brief Send data on LIN bus */
 void LinBus::Request(uint8_t id, uint8_t* data, uint8_t len)
 {
    int sendLen = len == 0 ? 2 : len + 3;
 
    if (len > 8) return;
 
-   dma_disable_channel(DMA1, hw->dmatx);
-   dma_set_number_of_data(DMA1, hw->dmatx, sendLen);
-   dma_disable_channel(DMA1, hw->dmarx);
-   dma_set_memory_address(DMA1, hw->dmarx, (uint32_t)recvBuffer);
-   dma_set_number_of_data(DMA1, hw->dmarx, sizeof(recvBuffer));
+   dma_disable_channel(hw->dma, hw->dmatx);
+   dma_set_number_of_data(hw->dma, hw->dmatx, sendLen);
+   dma_disable_channel(hw->dma, hw->dmarx);
+   dma_set_memory_address(hw->dma, hw->dmarx, (uint32_t)recvBuffer);
+   dma_set_number_of_data(hw->dma, hw->dmarx, sizeof(recvBuffer));
 
    sendBuffer[0] = 0x55; //Sync
    sendBuffer[1] = Parity(id);
@@ -104,23 +112,17 @@ void LinBus::Request(uint8_t id, uint8_t* data, uint8_t len)
 
    sendBuffer[len + 2] = Checksum(sendBuffer[1], data, len);
 
-   dma_clear_interrupt_flags(DMA1, hw->dmatx, DMA_TCIF);
+   dma_clear_interrupt_flags(hw->dma, hw->dmatx, DMA_TCIF);
 
-   USART_CR1(usart) |= USART_CR1_SBK;
-   dma_enable_channel(DMA1, hw->dmatx);
-   dma_enable_channel(DMA1, hw->dmarx);
+   USART_CR1(hw->usart) |= USART_CR1_SBK;
+   dma_enable_channel(hw->dma, hw->dmatx);
+   dma_enable_channel(hw->dma, hw->dmarx);
 }
 
-/** \brief Check whether we received valid data with given PID and length
- *
- * \param pid Feature ID to check for
- * \param requiredLen Length of data we expect
- * \return true if data with given properties was received
- *
- */
+/** \brief Check whether we received valid data with given PID and length */
 bool LinBus::HasReceived(uint8_t id, uint8_t requiredLen)
 {
-   int numRcvd = dma_get_number_of_data(DMA1, hw->dmarx);
+   int numRcvd = dma_get_number_of_data(hw->dma, hw->dmarx);
    int receiveIdx = sizeof(recvBuffer) - numRcvd;
 
    if (requiredLen > 8) return false;
@@ -130,21 +132,23 @@ bool LinBus::HasReceived(uint8_t id, uint8_t requiredLen)
    if (receiveIdx == (requiredLen + payloadIndex + 1) && recvBuffer[pidIndex] == pid)
    {
       uint8_t checksum = Checksum(recvBuffer[pidIndex], &recvBuffer[payloadIndex], requiredLen);
-
       return checksum == recvBuffer[requiredLen + payloadIndex];
    }
 
    return false;
 }
 
-/** \brief Calculate LIN checksum
- *
- * \param pid ID with parity
- * \param data uint8_t*
- * \param len int
- * \return checksum
- *
- */
+#else // !STM32F1 — no-op base; subclass provides hardware implementation
+
+LinBus::LinBus() {}
+LinBus::LinBus(uint32_t /*usart*/, int /*baudrate*/) {}
+void LinBus::Init(uint32_t /*usart*/, int /*baudrate*/) {}
+void LinBus::Request(uint8_t /*id*/, uint8_t* /*data*/, uint8_t /*len*/) {}
+bool LinBus::HasReceived(uint8_t /*id*/, uint8_t /*requiredLen*/) { return false; }
+
+#endif // STM32F1
+
+/** \brief Calculate LIN enhanced checksum (includes PID in sum) */
 uint8_t LinBus::Checksum(uint8_t pid, uint8_t* data, int len)
 {
    uint8_t checksum = pid;
@@ -152,7 +156,7 @@ uint8_t LinBus::Checksum(uint8_t pid, uint8_t* data, int len)
    for (int i = 0; i < len; i++)
    {
       uint16_t tmp = (uint16_t)checksum + (uint16_t)data[i];
-      if (tmp > 256) tmp -= 255;
+      if (tmp >= 256) tmp -= 255;
       checksum = tmp;
    }
    return checksum ^ 0xff;

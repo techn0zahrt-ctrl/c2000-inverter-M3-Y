@@ -2,8 +2,11 @@ add_library(
   inverter_drivers
   c2000_can.cpp
   c2000_crc.cpp
+  c2000_lin.cpp
   eeprom.cpp
+  oiltempcontroller.cpp
   param_save.cpp
+  teslam3oilpump.cpp
   encoder.cpp
   pmicspidriver.cpp
   pwmdriver.cpp

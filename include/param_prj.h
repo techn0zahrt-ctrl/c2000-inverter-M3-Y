@@ -24,7 +24,7 @@
    2. Temporary parameters (id = 0)
    3. Display values
  */
-//Next param id (increase when adding new parameter!): 138
+//Next param id (increase when adding new parameter!): 169
 //Next value Id: 2049
 /*              category     name         unit       min     max     default id */
 
@@ -100,6 +100,13 @@
     PARAM_ENTRY(CAT_CHARGER, chargeflt,   "dig",     0,      10,     8,      73  ) \
     PARAM_ENTRY(CAT_CHARGER, chargepwmin, "%",       0,      99,     0,      128 ) \
     PARAM_ENTRY(CAT_CHARGER, chargepwmax, "%",       0,      99,     90,     79  )
+
+#define OILPUMP_PARAMETERS \
+    PARAM_ENTRY(CAT_OILPUMP, tmpoilmax,   "°C",     70,    100,    100,      165 ) \
+    PARAM_ENTRY(CAT_OILPUMP, tmpoilhigh,  "°C",     10,    100,     45,      166 ) \
+    PARAM_ENTRY(CAT_OILPUMP, tmpoillow,   "°C",     10,    100,     25,      167 ) \
+    PARAM_ENTRY(CAT_OILPUMP, pumpspeed,   "dig",     0,    255,     70,      164 ) \
+    PARAM_ENTRY(CAT_OILPUMP, pumpspeedidle,"dig",    0,    255,     17,      168 )
 
 #define THROTTLE_PARAMETERS_COMMON \
     PARAM_ENTRY(CAT_THROTTLE,potmin,      "dig",     0,      4095L,  0,      17  ) \
@@ -181,6 +188,10 @@
     VALUE_ENTRY(din_ocur,    OKERR,   2030 ) \
     VALUE_ENTRY(din_desat,   OKERR,   2031 ) \
     VALUE_ENTRY(din_bms,     ONOFF,   2032 ) \
+    VALUE_ENTRY(tmpoil,      "°C",    2063 ) \
+    VALUE_ENTRY(oilpres,     "psi",   2064 ) \
+    VALUE_ENTRY(upmp,        "V",     2065 ) \
+    VALUE_ENTRY(pmprev,      "rpm",   2066 ) \
     VALUE_ENTRY(cpuload,     "%",     2035 ) \
 
 #define VALUES_SINE \
@@ -209,6 +220,7 @@
     DERATE_PARAMETERS_COMMON \
     DERATE_PARAMETERS_SINE \
     CHARGER_PARAMETERS \
+    OILPUMP_PARAMETERS \
     AUTOMATION_CONTACT_PWM_COMM_PARAMETERS \
     PARAM_ENTRY(CAT_TEST,    fslipspnt,   "Hz",      -100,   1000,   0,      0   ) \
     PARAM_ENTRY(CAT_TEST,    ampnom,      "%",       0,      100,    0,      0   ) \
@@ -228,6 +240,7 @@
     REGEN_PARAMETERS \
     DERATE_PARAMETERS_COMMON \
     CHARGER_PARAMETERS \
+    OILPUMP_PARAMETERS \
     AUTOMATION_CONTACT_PWM_COMM_PARAMETERS \
     PARAM_ENTRY(CAT_TEST,    manualiq,    "A",       -400,   400,    0,      0  ) \
     PARAM_ENTRY(CAT_TEST,    manualid,    "A",       -400,   400,    0,      0  ) \
@@ -271,6 +284,7 @@
 #define CAT_TEST     "Testing"
 #define CAT_CHARGER  "Charger"
 #define CAT_COMM     "Communication"
+#define CAT_OILPUMP  "Oil Pump"
 
 /***** enums ******/
 

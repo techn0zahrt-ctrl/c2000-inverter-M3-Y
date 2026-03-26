@@ -19,38 +19,60 @@
 #ifndef LINBUS_H
 #define LINBUS_H
 
+#include <stdint.h>
+#ifdef __TMS320C2000__
+#ifndef override
+#define override
+#endif
+#ifndef final
+#define final
+#endif
+typedef uint16_t uint8_t;
+typedef int16_t int8_t;
+#endif
 
+/** \brief LIN bus interface / STM32 concrete implementation.
+ *
+ * On STM32F1 this class provides the concrete USART+DMA hardware driver.
+ * On other platforms (C2000, host) the hardware methods are no-ops; a
+ * platform-specific subclass overrides them with real hardware access.
+ */
 class LinBus
 {
-   public:
-      /** Default constructor */
-      LinBus(uint32_t usart, int baudrate);
-      void Request(uint8_t id, uint8_t* data, uint8_t len);
-      bool HasReceived(uint8_t pid, uint8_t requiredLen);
-      uint8_t* GetReceivedBytes() { return &recvBuffer[payloadIndex]; }
+public:
+   LinBus();
+   LinBus(uint32_t usart, int baudrate);
+   virtual ~LinBus() {}
 
-   protected:
+   virtual void Init(uint32_t usart, int baudrate);
+   virtual void Request(uint8_t id, uint8_t* data, uint8_t len);
+   virtual bool HasReceived(uint8_t id, uint8_t requiredLen);
+   virtual uint8_t* GetReceivedBytes() { return &recvBuffer[payloadIndex]; }
 
-   private:
-      struct HwInfo
-      {
-         uint32_t usart;
-         uint8_t dmatx;
-         uint8_t dmarx;
-         uint32_t port;
-         uint16_t pin;
-      };
+   static uint8_t Checksum(uint8_t pid, uint8_t* data, int len);
+   static uint8_t Parity(uint8_t id);
 
-      static uint8_t Checksum(uint8_t pid, uint8_t* data, int len);
-      static uint8_t Parity(uint8_t id);
+protected:
+   static const int payloadIndex = 3;
+   static const int pidIndex = 2;
+   uint8_t sendBuffer[11];
+   uint8_t recvBuffer[12];
 
-      static const HwInfo hwInfo[];
-      static const int payloadIndex = 3;
-      static const int pidIndex = 2;
+#ifdef STM32F1
+private:
+   struct HwInfo
+   {
       uint32_t usart;
-      const HwInfo* hw;
-      uint8_t sendBuffer[11];
-      uint8_t recvBuffer[12];
+      uint32_t dma;
+      uint8_t  dmatx;
+      uint8_t  dmarx;
+      uint32_t port;
+      uint16_t pintx;
+      uint16_t pinrx;
+   };
+   static const HwInfo hwInfo[];
+   const HwInfo* hw;
+#endif
 };
 
 #endif // LINBUS_H
