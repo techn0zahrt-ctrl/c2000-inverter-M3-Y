@@ -1,5 +1,6 @@
 add_library(
   inverter_drivers
+  c2000_can.cpp
   eeprom.cpp
   encoder.cpp
   pmicspidriver.cpp

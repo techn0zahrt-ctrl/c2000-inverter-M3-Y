@@ -9,3 +9,6 @@ updater.py
 stm32_sine
 stm32_foc
 build/*/
+*~
+RAMLS5
+RAMLS5,

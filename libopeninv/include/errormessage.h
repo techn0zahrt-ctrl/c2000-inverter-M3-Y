@@ -49,6 +49,8 @@ class ErrorMessage
       static void PrintAllErrors();
       static void PrintNewErrors();
       static ERROR_MESSAGE_NUM GetLastError();
+      static ERROR_MESSAGE_NUM GetErrorNum(uint16_t index);
+      static uint32_t GetErrorTime(uint16_t index);
       static bool HasErrorBeenPosted(ERROR_MESSAGE_NUM err);
    protected:
    private:

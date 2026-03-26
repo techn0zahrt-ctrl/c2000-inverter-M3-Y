@@ -96,4 +96,58 @@ uint32_t EEPROM::Read32Bits(uint16_t address)
         DEVICE_TESLAM3_EEPROM_SPI, SPI_DATA_LITTLE_ENDIAN, 0, 0);
 }
 
+void EEPROM::WaitForWrite(void)
+{
+    uint16_t status;
+
+    do
+    {
+        EEPROMTransaction transaction;
+
+        SPI_transmitByte(DEVICE_TESLAM3_EEPROM_SPI, EEPROM_CMD_RDSR);
+        status = SPI_receiveByte(DEVICE_TESLAM3_EEPROM_SPI, 0);
+    } while (status & 0x01); // WIP bit: 1 = write in progress
+}
+
+void EEPROM::Write8Bits(uint16_t address, uint16_t data)
+{
+    {
+        EEPROMTransaction transaction;
+
+        SPI_transmitByte(DEVICE_TESLAM3_EEPROM_SPI, EEPROM_CMD_WREN);
+    }
+
+    {
+        EEPROMTransaction transaction;
+
+        SPI_transmitByte(DEVICE_TESLAM3_EEPROM_SPI, EEPROM_CMD_WRITE);
+        SPI_transmit16Bits(DEVICE_TESLAM3_EEPROM_SPI, address);
+        SPI_transmitByte(DEVICE_TESLAM3_EEPROM_SPI, (uint16_t)(data & 0xFF));
+    }
+
+    WaitForWrite();
+}
+
+void EEPROM::Write32Bits(uint16_t address, uint32_t data)
+{
+    {
+        EEPROMTransaction transaction;
+
+        SPI_transmitByte(DEVICE_TESLAM3_EEPROM_SPI, EEPROM_CMD_WREN);
+    }
+
+    {
+        EEPROMTransaction transaction;
+
+        SPI_transmitByte(DEVICE_TESLAM3_EEPROM_SPI, EEPROM_CMD_WRITE);
+        SPI_transmit16Bits(DEVICE_TESLAM3_EEPROM_SPI, address);
+        SPI_transmit16Bits(
+            DEVICE_TESLAM3_EEPROM_SPI, (uint16_t)(data & 0xFFFF));
+        SPI_transmit16Bits(
+            DEVICE_TESLAM3_EEPROM_SPI, (uint16_t)(data >> 16));
+    }
+
+    WaitForWrite();
+}
+
 } // namespace c2000

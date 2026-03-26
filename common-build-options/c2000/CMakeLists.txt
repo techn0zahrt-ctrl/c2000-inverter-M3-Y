@@ -1,7 +1,7 @@
 # C2000 build platform
 
 set(CMAKE_CXX_STANDARD
-    98
+    14
     CACHE INTERNAL "")
 
 set(CMAKE_C_STANDARD
@@ -12,6 +12,9 @@ set(CMAKE_C_STANDARD
 # paths
 add_library(platform_options INTERFACE)
 target_compile_definitions(platform_options INTERFACE C2000 CPU1)
+target_include_directories(platform_options INTERFACE
+    "${CMAKE_SOURCE_DIR}/platform/c2000/include"
+    "${CMAKE_SOURCE_DIR}/platform/c2000/inverter_drivers")
 target_compile_options(
   platform_options
   INTERFACE -ml

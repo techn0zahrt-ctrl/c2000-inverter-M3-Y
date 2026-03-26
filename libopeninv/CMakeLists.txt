@@ -9,10 +9,13 @@ add_library(
   src/picontroller.cpp
   src/printf.cpp
   src/sine_core.cpp
-  src/crc8.cpp)
+  src/crc8.cpp
+  src/canhardware.cpp
+  src/canmap.cpp
+  src/cansdo.cpp
+  src/sdocommands.cpp
+  src/canobd2.cpp)
 target_link_libraries(libopeninv global_options)
 target_include_directories(libopeninv
                            PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
-# "Project" includes needed to customise the library build are pulled from the
-# top level include directory
 target_include_directories(libopeninv PRIVATE "${CMAKE_SOURCE_DIR}/include")

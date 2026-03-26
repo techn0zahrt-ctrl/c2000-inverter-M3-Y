@@ -18,6 +18,8 @@ endif()
 # Set all of our common platform specific compiler options, defines and include
 # paths
 add_library(platform_options INTERFACE)
+target_include_directories(platform_options INTERFACE
+    "${CMAKE_SOURCE_DIR}/platform/host/include")
 
 # Special library to add lastt when linking
 add_library(link_last INTERFACE)

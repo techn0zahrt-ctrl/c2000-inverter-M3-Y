@@ -39,6 +39,7 @@ namespace Param
    typedef enum
    {
        TYPE_PARAM,
+       TYPE_TESTPARAM,
        TYPE_VALUE,
        TYPE_LAST
    } PARAM_TYPE;
@@ -92,6 +93,8 @@ namespace Param
    void SetFlag(PARAM_NUM param, PARAM_FLAG flag);
    void ClearFlag(PARAM_NUM param, PARAM_FLAG flag);
    PARAM_FLAG GetFlag(PARAM_NUM param);
+   PARAM_TYPE GetType(PARAM_NUM param);
+   uint32_t   GetIdSum();
 
    //User defined callback
    void Change(Param::PARAM_NUM ParamNum);

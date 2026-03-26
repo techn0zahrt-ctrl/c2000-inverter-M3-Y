@@ -45,6 +45,26 @@ public:
      * \param address    Address of the value to read (0-0x8000)
      */
     static uint32_t Read32Bits(uint16_t address);
+
+    /**
+     * Write a single 8-bit value to the EEPROM
+     * \param address    Address to write to (0-0x7FFF)
+     * \param data       8-bit value to write (low byte used)
+     */
+    static void Write8Bits(uint16_t address, uint16_t data);
+
+    /**
+     * Write a 32-bit value to the EEPROM
+     * \param address    Address to write to (0-0x7FFF)
+     * \param data       32-bit value to write
+     */
+    static void Write32Bits(uint16_t address, uint32_t data);
+
+    /**
+     * Poll the EEPROM status register until the Write In Progress (WIP) bit
+     * clears, indicating the internal write cycle has completed
+     */
+    static void WaitForWrite(void);
 };
 
 } // namespace c2000

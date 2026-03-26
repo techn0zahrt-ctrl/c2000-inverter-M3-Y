@@ -242,4 +242,26 @@ PARAM_FLAG GetFlag(PARAM_NUM param)
    return (PARAM_FLAG)flags[param];
 }
 
+PARAM_TYPE GetType(PARAM_NUM param)
+{
+   return IsParam(param) ? TYPE_PARAM : TYPE_VALUE;
+}
+
+uint32_t GetIdSum()
+{
+#ifndef PARAM_ID_SUM_START_OFFSET
+#define PARAM_ID_SUM_START_OFFSET 0
+#endif // PARAM_ID_SUM_START_OFFSET
+//#define PARAM_ENTRY(category, name, unit, min, max, def, id) id +
+//#define TESTP_ENTRY(category, name, unit, min, max, def, id) id +
+//#define VALUE_ENTRY(name, unit, id) id +
+#define PARAM_ENTRY(category, name, unit, min, max, def, id) (uint32_t)(id) +
+#define TESTP_ENTRY(category, name, unit, min, max, def, id) (uint32_t)(id) +
+#define VALUE_ENTRY(name, unit, id) (uint32_t)(id) +
+   return PARAM_LIST PARAM_ID_SUM_START_OFFSET;
+#undef PARAM_ENTRY
+#undef TESTP_ENTRY
+#undef VALUE_ENTRY
+}
+
 }
