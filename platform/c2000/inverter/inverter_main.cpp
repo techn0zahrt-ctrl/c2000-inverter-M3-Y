@@ -24,6 +24,7 @@
 #include "pmicdriver.h"
 #include "c2000/current.h"
 #include "c2000/encoder.h"
+#include "c2000/eeprom.h"
 #include "c2000/gatedriver.h"
 #include "c2000/motoranalogcapture.h"
 #include "c2000/performancecounter.h"
@@ -31,15 +32,24 @@
 #include "c2000/pwmdriver.h"
 #include "c2000/pwmgeneration.h"
 #include "c2000/scheduler.h"
-#include <stdio.h>
+#include "c2000_can.h"
+#include "canmap.h"
+#include "cansdo.h"
+#include "sdocommands.h"
+#include "param_save.h"
 #include <inttypes.h>
 
 
 // Pull in the whole C2000 namespace as this is platform specific code obviously
 using namespace c2000;
 
+static C2000Can can(CANA_BASE);
+static CanMap canMap(&can);
+static CanSdo canSdo(&can, &canMap);
+
 void Param::Change(Param::PARAM_NUM paramNum)
 {
+    (void)paramNum;
 }
 
 typedef TeslaM3PowerWatchdog<PmicSpiDriver> PowerWatchdog;
@@ -136,6 +146,12 @@ void main(void)
     //
     Interrupt_initVectorTable();
 
+    // Initialize CAN at 500kbps
+    can.SetBaudrate(CanHardware::Baud500);
+    EEPROM::InitSPI();
+    // Load CAN map from EEPROM if valid
+    parm_load();
+
     Scheduler::Init();
 
     printf(
@@ -197,6 +213,8 @@ void main(void)
     while (true)
     {
         DEVICE_DELAY_US(500000);
+
+        canMap.SendAll();
 
         printf(
             "PhaseA Current = %" PRId32 ", PhaseB Current = %" PRId32 ", Resolver Sine = %u, "
