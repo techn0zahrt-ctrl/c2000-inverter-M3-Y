@@ -54,9 +54,11 @@ Connect using the LAUNCHXL-F28379D as an external XDS100v2 probe. See [JTAG cabl
 * [x] Tesla M3 oil pump control via LIN bus
 * [x] Build compatibility with TI C2000 compiler 25.11.0.LTS
 * [x] WSL2/Ubuntu build environment support
+* [x] First hardware validation on Tesla FDU inverter (RAM boot via JTAG)
+* [x] PMIC initialization confirmed on hardware
+* [x] Gate driver initialization confirmed on hardware  
+* [x] Main loop executing with LED heartbeat on hardware
 
-### In Progress / Remaining
-* [ ] First hardware validation (awaiting JTAG connection)
 * [ ] CAN firmware upgrade over openinverter CAN protocol
 * [ ] High Voltage InterLock (HVIL) support
 * [ ] Front drive unit (SINE/induction) hardware validation
