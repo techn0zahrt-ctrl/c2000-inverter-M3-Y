@@ -43,9 +43,10 @@
 // Pull in the whole C2000 namespace as this is platform specific code obviously
 using namespace c2000;
 
-static C2000Can can(CANA_BASE);
-static CanMap canMap(&can);
-static CanSdo canSdo(&can, &canMap);
+static C2000Can* can;
+static CanMap* canMap;
+//static CanSdo* canSdo;
+static CanSdo* canSdo __attribute__((unused));
 
 void Param::Change(Param::PARAM_NUM paramNum)
 {
@@ -109,9 +110,23 @@ void main(void)
     {
         heartbeatLedPin = DEVICE_LAUNCHXL_GPIO_PIN_LED1;
     }
-    GPIO_writePin(heartbeatLedPin, 1);
     GPIO_setPadConfig(heartbeatLedPin, GPIO_PIN_TYPE_STD);
     GPIO_setDirectionMode(heartbeatLedPin, GPIO_DIR_MODE_OUT);
+    GPIO_writePin(heartbeatLedPin, 1);
+
+    // Set up second LED (red on Tesla)
+    uint32_t heartbeatLedPin2;
+    if (IsTeslaM3Inverter())
+    {
+        heartbeatLedPin2 = DEVICE_TESLAM3_GPIO_PIN_LED2;
+    }
+    else
+    {
+        heartbeatLedPin2 = DEVICE_LAUNCHXL_GPIO_PIN_LED2;
+    }
+    GPIO_setPadConfig(heartbeatLedPin2, GPIO_PIN_TYPE_STD);
+    GPIO_setDirectionMode(heartbeatLedPin2, GPIO_DIR_MODE_OUT);
+    GPIO_writePin(heartbeatLedPin2, 0);
 
     //
     // Turn on the gate drive PSU
@@ -147,7 +162,10 @@ void main(void)
     Interrupt_initVectorTable();
 
     // Initialize CAN at 500kbps
-    can.SetBaudrate(CanHardware::Baud500);
+    can = new C2000Can(CANA_BASE);
+    canMap = new CanMap(can);
+    canSdo = new CanSdo(can, canMap);
+    can->SetBaudrate(CanHardware::Baud500);
     EEPROM::InitSPI();
     // Load CAN map from EEPROM if valid
     parm_load();
@@ -194,6 +212,8 @@ void main(void)
     // Enable Global Interrupt (INTM) and realtime interrupt (DBGM)
     //
     EINT;
+    // Diagnostic: turn on green LED to confirm we reached this point
+    //GPIO_writePin(heartbeatLedPin, 0);
     ERTM;
 
     //
@@ -209,12 +229,13 @@ void main(void)
     //
     // Loop Forever
     //
+    int blinkState = 0;
     int32_t lastLoad = PwmGeneration::GetCpuLoad();
     while (true)
     {
         DEVICE_DELAY_US(500000);
 
-        canMap.SendAll();
+        canMap->SendAll();
 
         printf(
             "PhaseA Current = %" PRId32 ", PhaseB Current = %" PRId32 ", Resolver Sine = %u, "
@@ -230,6 +251,21 @@ void main(void)
         printf("PWM cycles: %ld\n", currentLoad - lastLoad);
         lastLoad = currentLoad;
 
-        GPIO_togglePin(heartbeatLedPin);
+        // Blink pattern: 2x green, 2x red
+        // States 0,1 = green on/off, States 2,3 = green on/off,
+        // States 4,5 = red on/off, States 6,7 = red on/off
+        switch (blinkState)
+        {
+        case 0: GPIO_writePin(heartbeatLedPin, 0);  GPIO_writePin(heartbeatLedPin2, 1); break;
+        case 1: GPIO_writePin(heartbeatLedPin, 1);  GPIO_writePin(heartbeatLedPin2, 1); break;
+        case 2: GPIO_writePin(heartbeatLedPin, 0);  GPIO_writePin(heartbeatLedPin2, 1); break;
+        case 3: GPIO_writePin(heartbeatLedPin, 1);  GPIO_writePin(heartbeatLedPin2, 1); break;
+        case 4: GPIO_writePin(heartbeatLedPin, 1);  GPIO_writePin(heartbeatLedPin2, 0); break;
+        case 5: GPIO_writePin(heartbeatLedPin, 1);  GPIO_writePin(heartbeatLedPin2, 1); break;
+        case 6: GPIO_writePin(heartbeatLedPin, 1);  GPIO_writePin(heartbeatLedPin2, 0); break;
+        case 7: GPIO_writePin(heartbeatLedPin, 1);  GPIO_writePin(heartbeatLedPin2, 1); break;
+        default: blinkState = -1; break;
+        }
+        blinkState = (blinkState + 1) % 8;
     }
 }
