@@ -37,8 +37,9 @@
 #include "cansdo.h"
 #include "sdocommands.h"
 #include "param_save.h"
-#include <inttypes.h>
+//#include <inttypes.h>
 
+#define PRINTF(...) do { DINT; printf(__VA_ARGS__); EINT; } while(0)
 
 // Pull in the whole C2000 namespace as this is platform specific code obviously
 using namespace c2000;
@@ -134,20 +135,20 @@ void main(void)
     GPIO_writePin(DEVICE_GPIO_PIN_GATE_PSU_ENABLE, 0);
     GPIO_setPadConfig(DEVICE_GPIO_PIN_GATE_PSU_ENABLE, GPIO_PIN_TYPE_STD);
     GPIO_setDirectionMode(DEVICE_GPIO_PIN_GATE_PSU_ENABLE, GPIO_DIR_MODE_OUT);
-    printf("Gate Drive PSU ON\n");
+    PRINTF("Gate Drive PSU ON\n");
 
     //
     // Set up the gate drivers for PWM operation
     //
-    printf("Gate Drive initialisation: ");
+    PRINTF("Gate Drive initialisation: ");
     if (GateDriver::Init())
     {
-        printf("OK\n");
+        PRINTF("OK\n");
         GateDriver::Enable();
     }
     else
     {
-        printf("Fail\n");
+        PRINTF("Fail\n");
     }
 
     //
@@ -172,7 +173,7 @@ void main(void)
 
     Scheduler::Init();
 
-    printf(
+    PRINTF(
         "Pmic driver initialisation: %s\n",
         PowerWatchdog::Init() == PowerWatchdog::OK ? "OK" : "Fail");
 
@@ -237,19 +238,25 @@ void main(void)
 
         canMap->SendAll();
 
-        printf(
-            "PhaseA Current = %" PRId32 ", PhaseB Current = %" PRId32 ", Resolver Sine = %u, "
+        PRINTF(
+            "PhaseA Current = %d, PhaseB Current = %d, Resolver Sine = %u, "
             "Resolver Cosine = %u\n",
             Param::Get(Param::il1),
             Param::Get(Param::il2),
             MotorAnalogCapture::ResolverSine(),
             MotorAnalogCapture::ResolverCosine());
 
-        printf("Gate Drive: %s\n", GateDriver::IsFaulty() ? "FAULT" : "OK");
+        PRINTF("Gate Drive: %s\n", GateDriver::IsFaulty() ? "FAULT" : "OK");
+        uint16_t gd_status1[6], gd_status2[6], gd_status3[6];
+        GateDriver::GetStatus(gd_status1, gd_status2, gd_status3);
+        PRINTF("GD0: S1=0x%x S2=0x%x S3=0x%x\n", gd_status1[0], gd_status2[0], gd_status3[0]);
+        PRINTF("GD1: S1=0x%x S2=0x%x S3=0x%x\n", gd_status1[1], gd_status2[1], gd_status3[1]);
+        PRINTF("GD2: S1=0x%x S2=0x%x S3=0x%x\n", gd_status1[2], gd_status2[2], gd_status3[2]);
 
         int32_t currentLoad = PwmGeneration::GetCpuLoad();
-        printf("PWM cycles: %ld\n", currentLoad - lastLoad);
+        PRINTF("PWM cycles: %d\n", currentLoad - lastLoad);
         lastLoad = currentLoad;
+
 
         // Blink pattern: 2x green, 2x red, Repeat
         // States 0,1 = green on/off, States 2,3 = green on/off,

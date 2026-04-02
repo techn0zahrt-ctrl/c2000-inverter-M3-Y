@@ -145,6 +145,13 @@ bool GateDriver::IsFaulty()
     return !(status1 && status2 && status3);
 }
 
+void GateDriver::GetStatus(uint16_t* status1, uint16_t* status2, uint16_t* status3)
+{
+    ReadRegister(STGAP1AS_REG_STATUS1, status1);
+    ReadRegister(STGAP1AS_REG_STATUS2, status2);
+    ReadRegister(STGAP1AS_REG_STATUS3, status3);
+}
+
 /**
  * \brief Enable the gate drivers
  */

@@ -32,6 +32,7 @@ class GateDriver
 public:
     static bool Init();
     static bool IsFaulty();
+    static void GetStatus(uint16_t* status1, uint16_t* status2, uint16_t* status3);
     static void Enable();
     static void Disable();
 
