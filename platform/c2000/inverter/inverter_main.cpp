@@ -251,7 +251,7 @@ void main(void)
         printf("PWM cycles: %ld\n", currentLoad - lastLoad);
         lastLoad = currentLoad;
 
-        // Blink pattern: 2x green, 2x red
+        // Blink pattern: 2x green, 2x red, Repeat
         // States 0,1 = green on/off, States 2,3 = green on/off,
         // States 4,5 = red on/off, States 6,7 = red on/off
         switch (blinkState)

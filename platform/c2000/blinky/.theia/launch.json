@@ -1,0 +1,13 @@
+{
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Tesla RDU.ccxml",
+      "type": "ccs-debug",
+      "request": "launch",
+      "targetConfig": "${targetConfigFolder}\\Tesla RDU.ccxml"
+    }
+  ]
+}
