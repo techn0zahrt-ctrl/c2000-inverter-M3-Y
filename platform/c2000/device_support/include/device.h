@@ -85,10 +85,10 @@ a single CPU should be defined."
 //
 // GPIO assignment for CAN-A and CAN-B
 //
-#define DEVICE_GPIO_CFG_CANRXA      GPIO_36_CANRXA  // "pinConfig" for CANA RX
-#define DEVICE_GPIO_CFG_CANTXA      GPIO_37_CANTXA  // "pinConfig" for CANA TX
-#define DEVICE_GPIO_CFG_CANRXB      GPIO_17_CANRXB  // "pinConfig" for CANB RX
-#define DEVICE_GPIO_CFG_CANTXB      GPIO_12_CANTXB  // "pinConfig" for CANB TX
+#define DEVICE_GPIO_CFG_CANRXA      GPIO_5_CANRXA  // "pinConfig" for CANA RX
+#define DEVICE_GPIO_CFG_CANTXA      GPIO_4_CANTXA  // "pinConfig" for CANA TX
+#define DEVICE_GPIO_CFG_CANRXB      GPIO_7_CANRXB  // "pinConfig" for CANB RX
+#define DEVICE_GPIO_CFG_CANTXB      GPIO_6_CANTXB  // "pinConfig" for CANB TX
 
 //I2CA GPIO pins
 #define DEVICE_GPIO_PIN_SDAA    104

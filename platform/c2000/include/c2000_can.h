@@ -30,13 +30,17 @@ public:
    void SetBaudrate(enum baudrates baudrate) override;
    void Send(uint32_t canId, uint32_t data[2], uint8_t len) override;
    void HandleMessage();
-
+   int GetUserMessageCount() { return nextUserMessageIndex; }
+   uint32_t GetUserId(int i) { return userIds[i]; }
+   uint32_t* GetUserIdPtr() { return userIds; }
+   
    /* Public so ISR free functions can access them without friend/extern-C clash */
    static C2000Can* instanceA;
    static C2000Can* instanceB;
 
 protected:
    void ConfigureFilters() override;
+   void RegisterInterrupts() override;
 
 private:
    uint32_t base;

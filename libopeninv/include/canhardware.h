@@ -81,6 +81,7 @@ class CanHardware
        *
        */
       uint32_t GetLastRxTimestamp() { return lastRxTimestamp; }
+      int GetCallbackCount() const { return nextCallbackIndex; }
 
    protected:
       uint32_t userIds[MAX_USER_MESSAGES];

@@ -77,9 +77,8 @@ SECTIONS
    .bss:output      : > RAMLS3,    PAGE = 0
    .init_array      : > RAMM0,     PAGE = 0
    .const           : >> RAMGS2 | RAMGS3 |RAMGS4 | RAMGS5,    PAGE = 1
-//   .data            : > RAMLS5,    PAGE = 1
    .data            : >> RAMLS5 | RAMGS0 | RAMGS1,    PAGE = 1
-   .sysmem          : > RAMLS5,    PAGE = 1
+   .sysmem          : > RAMGS12 | RAMGS12,    PAGE = 1
 #else
    .pinit           : > RAMM0,     PAGE = 0
    .ebss            : > RAMLS5,    PAGE = 1

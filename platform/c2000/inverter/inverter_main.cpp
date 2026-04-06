@@ -39,27 +39,139 @@
 #include "param_save.h"
 //#include <inttypes.h>
 
+#define TX_OBJ_ID 1
+#define RX_OBJ_ID 2
+
 #define PRINTF(...) do { DINT; printf(__VA_ARGS__); EINT; } while(0)
 
 // Pull in the whole C2000 namespace as this is platform specific code obviously
 using namespace c2000;
 
-static C2000Can* can;
-static CanMap* canMap;
-//static CanSdo* canSdo;
+static C2000Can* can __attribute__((unused));
+static CanMap* canMap __attribute__((unused));
 static CanSdo* canSdo __attribute__((unused));
+volatile uint32_t canRxCount = 0;
+volatile uint32_t canIsrCount = 0;
+volatile uint32_t canStatusCount = 0;
+volatile uint32_t canLastCause = 0;
+volatile uint32_t canLastStatus = 0;
+volatile uint32_t canHandleRxCount = 0;
+volatile uint32_t canLastMsgId = 0;
+
+//static uint16_t txBuf[8] = {0};
+static volatile uint16_t rxBuf[8] = {0};
+
+static volatile uint8_t  rxBytes[8] = {0};
+//static volatile uint32_t rxCount = 0;
+static volatile uint16_t rxPending = 0;
+static volatile uint32_t canStatus = 0;
+static volatile uint16_t canStatusPending = 0;
+
+static void canUnpack8(const volatile uint16_t *buf, volatile uint8_t *d)
+{
+    d[0] = (uint8_t)(buf[1] & 0xFF);
+    d[1] = (uint8_t)((buf[1] >> 8) & 0xFF);
+    d[2] = (uint8_t)(buf[3] & 0xFF);
+    d[3] = (uint8_t)((buf[3] >> 8) & 0xFF);
+    d[4] = (uint8_t)(buf[5] & 0xFF);
+    d[5] = (uint8_t)((buf[5] >> 8) & 0xFF);
+    d[6] = (uint8_t)(buf[7] & 0xFF);
+    d[7] = (uint8_t)((buf[7] >> 8) & 0xFF);
+}
+
+volatile uint32_t paramChangeCount = 0;
 
 void Param::Change(Param::PARAM_NUM paramNum)
 {
     (void)paramNum;
+    paramChangeCount++;
 }
 
 typedef TeslaM3PowerWatchdog<PmicSpiDriver> PowerWatchdog;
 
+//*
 // task added to scheduler to strobe the powerwatchdog
 static void taskStrobePowerWatchdog()
 {
     PowerWatchdog::Strobe();
+}
+//*/
+__interrupt void canISR(void)
+{
+    uint32_t cause = CAN_getInterruptCause(CANA_BASE);
+
+    if(cause == RX_OBJ_ID)
+    {
+        if(CAN_readMessage(CANA_BASE, RX_OBJ_ID, (uint16_t *)rxBuf))
+        {
+            canUnpack8(rxBuf, rxBytes);
+            canRxCount++;
+            rxPending = 1;
+        }
+
+        //
+        // Explicitly clear this mailbox interrupt source
+        //
+        CAN_clearInterruptStatus(CANA_BASE, RX_OBJ_ID);
+    }
+    else if(cause == CAN_INT_INT0ID_STATUS)
+    {
+        canStatus = CAN_getStatus(CANA_BASE);
+        canStatusPending = 1;
+
+        //
+        // Clear CAN status interrupt source
+        //
+        CAN_clearInterruptStatus(CANA_BASE, CAN_INT_INT0ID_STATUS);
+    }
+
+    //
+    // Clear CANINT0 global flag
+    //
+    CAN_clearGlobalInterruptStatus(CANA_BASE, CAN_GLOBAL_INT_CANINT0);
+
+    //
+    // Acknowledge PIE group 9
+    //
+    Interrupt_clearACKGroup(INTERRUPT_ACK_GROUP9);
+}
+
+void mycaninit(void)
+{
+    GPIO_setPinConfig(DEVICE_GPIO_CFG_CANRXA);
+    GPIO_setPinConfig(DEVICE_GPIO_CFG_CANTXA);
+    GPIO_setDirectionMode(5U, GPIO_DIR_MODE_IN);
+    GPIO_setDirectionMode(4U, GPIO_DIR_MODE_OUT);
+    GPIO_setQualificationMode(5U, GPIO_QUAL_ASYNC);
+
+    CAN_initModule(CANA_BASE);
+    CAN_setBitRate(CANA_BASE, 200000000UL, 500000UL, 16U);
+
+    CAN_setupMessageObject(CANA_BASE,
+                           TX_OBJ_ID,
+                           0x601,
+                           CAN_MSG_FRAME_STD,
+                           CAN_MSG_OBJ_TYPE_TX,
+                           0,
+                           CAN_MSG_OBJ_NO_FLAGS,
+                           8);
+
+    CAN_setupMessageObject(CANA_BASE,
+                           RX_OBJ_ID,
+                           0x601,
+                           CAN_MSG_FRAME_STD,
+                           CAN_MSG_OBJ_TYPE_RX,
+                           0x7ff,
+                           CAN_MSG_OBJ_USE_ID_FILTER | CAN_MSG_OBJ_RX_INT_ENABLE,
+                           8);
+
+    Interrupt_register(INT_CANA0, &canISR);
+    Interrupt_enable(INT_CANA0);
+
+    CAN_enableInterrupt(CANA_BASE, CAN_INT_IE0 | CAN_INT_ERROR | CAN_INT_STATUS);
+    CAN_enableGlobalInterrupt(CANA_BASE, CAN_GLOBAL_INT_CANINT0);
+
+    CAN_startModule(CANA_BASE);
 }
 
 void main(void)
@@ -68,35 +180,30 @@ void main(void)
     // Initialize device clock and peripherals
     //
     Device_init();
-
     //
     // Initialize GPIO and configure the GPIO pin as a push-pull output
     //
     Device_initGPIO();
 
     //
-    // Set up GPIO pinmux for EPWM
+    // Initialize PIE and clear PIE registers. Disables CPU interrupts.
     //
-    if (IsTeslaM3Inverter())
-    {
-        GPIO_setPinConfig(GPIO_0_EPWM1A);
-        GPIO_setPinConfig(GPIO_8_EPWM5A);
-        GPIO_setPinConfig(GPIO_9_EPWM5B);
-        GPIO_setPinConfig(GPIO_10_EPWM6A);
-        GPIO_setPinConfig(GPIO_11_EPWM6B);
-        GPIO_setPinConfig(GPIO_12_EPWM7A);
-        GPIO_setPinConfig(GPIO_13_EPWM7B);
-    }
-    else
-    {
-        GPIO_setPinConfig(GPIO_0_EPWM1A);
-        GPIO_setPinConfig(GPIO_2_EPWM2A);
-        GPIO_setPinConfig(GPIO_3_EPWM2B);
-        GPIO_setPinConfig(GPIO_4_EPWM3A);
-        GPIO_setPinConfig(GPIO_5_EPWM3B);
-        GPIO_setPinConfig(GPIO_8_EPWM5A);
-        GPIO_setPinConfig(GPIO_9_EPWM5B);
-    }
+    Interrupt_initModule();
+
+    //
+    // Initialize the PIE vector table with pointers to the shell Interrupt
+    // Service Routines (ISR).
+    //
+    Interrupt_initVectorTable();
+    //
+    // Set up GPIO pinmux for EPWM
+    GPIO_setPinConfig(GPIO_0_EPWM1A);
+    GPIO_setPinConfig(GPIO_8_EPWM5A);
+    GPIO_setPinConfig(GPIO_9_EPWM5B);
+    GPIO_setPinConfig(GPIO_10_EPWM6A);
+    GPIO_setPinConfig(GPIO_11_EPWM6B);
+    GPIO_setPinConfig(GPIO_12_EPWM7A);
+    GPIO_setPinConfig(GPIO_13_EPWM7B);
 
     //
     // Set up the heartbeat LED
@@ -129,7 +236,7 @@ void main(void)
     GPIO_setDirectionMode(heartbeatLedPin2, GPIO_DIR_MODE_OUT);
     GPIO_writePin(heartbeatLedPin2, 0);
 
-    //
+    //*/
     // Turn on the gate drive PSU
     //
     GPIO_writePin(DEVICE_GPIO_PIN_GATE_PSU_ENABLE, 0);
@@ -151,35 +258,16 @@ void main(void)
         PRINTF("Fail\n");
     }
 
-    //
-    // Initialize PIE and clear PIE registers. Disables CPU interrupts.
-    //
-    Interrupt_initModule();
-
-    //
-    // Initialize the PIE vector table with pointers to the shell Interrupt
-    // Service Routines (ISR).
-    //
-    Interrupt_initVectorTable();
-
-    // Initialize CAN at 500kbps
-    can = new C2000Can(CANA_BASE);
-    canMap = new CanMap(can);
-    canSdo = new CanSdo(can, canMap);
-    can->SetBaudrate(CanHardware::Baud500);
     EEPROM::InitSPI();
     // Load CAN map from EEPROM if valid
     parm_load();
 
     Scheduler::Init();
-
-    PRINTF(
-        "Pmic driver initialisation: %s\n",
+    PRINTF("Pmic driver initialisation: %s\n",
         PowerWatchdog::Init() == PowerWatchdog::OK ? "OK" : "Fail");
 
     // add a task to strobe the power watchdog every 100ms
     Scheduler::AddTask(taskStrobePowerWatchdog, 100);
-
     // Set up the error message log and set operating parameters to default
     ErrorMessage::ResetAll();
     // TODO: Figure out where the timer tick comes from to increment this
@@ -209,12 +297,28 @@ void main(void)
     // Put in a bit of Q current to get the inverter to do something
     Param::Set(Param::manualiq, FP_FROMFLT(0.6));
 
+    // Go for manual mode
+    PwmGeneration::SetOpmode(MANUAL);
+//*/
+    // Initialize CAN at 500kbps
+    can = new C2000Can(CANA_BASE);
+    can->SetBaudrate(CanHardware::Baud500);
+    
+
+    canMap = new CanMap(can);
+    canSdo = new CanSdo(can, canMap);
+
+    //mycaninit();
+    PRINTF("MVAL_X=0x%x MVAL_21=0x%x\n", (uint16_t)HWREG_BP(CANA_BASE + 0xC0U), (uint16_t)HWREG_BP(CANA_BASE + 0xC4U));
+    //PRINTF("CAN filter count: %d\n", can->GetUserMessageCount());
+    //PRINTF("userId[0]=0x%x\n", (uint16_t)can->GetUserId(0));
+    //PRINTF("userIds ptr hi=0x%x lo=0x%x\n", (uint16_t)((uint32_t)can->GetUserIdPtr() >> 16), (uint16_t)(uint32_t)can->GetUserIdPtr());
+    PRINTF("CANA CTL after init: 0x%x\n", HWREGH(0x48000));
+
     //
     // Enable Global Interrupt (INTM) and realtime interrupt (DBGM)
     //
     EINT;
-    // Diagnostic: turn on green LED to confirm we reached this point
-    //GPIO_writePin(heartbeatLedPin, 0);
     ERTM;
 
     //
@@ -224,8 +328,13 @@ void main(void)
     GPIO_setPadConfig(DEVICE_GPIO_PIN_PWM_ENABLE, GPIO_PIN_TYPE_STD);
     GPIO_setDirectionMode(DEVICE_GPIO_PIN_PWM_ENABLE, GPIO_DIR_MODE_OUT);
 
-    // Go for manual mode
-    PwmGeneration::SetOpmode(MANUAL);
+    EALLOW;
+    uint32_t gpamux1 = HWREG(0x7C00U + 0x6U);
+    uint32_t gpadir = HWREG(0x7C00U + 0xCU);
+    uint32_t gpagmux1 = HWREG(0x7C00U + 0x20U); // GPAGMUX1
+    EDIS;
+    PRINTF("GPAMUX1=0x%x GPADIR=0x%x\n", (uint16_t)gpamux1, (uint16_t)gpadir);
+    PRINTF("GPAGMUX1=0x%x\n", (uint16_t)gpagmux1);
 
     //
     // Loop Forever
@@ -236,11 +345,25 @@ void main(void)
     {
         DEVICE_DELAY_US(500000);
 
-        canMap->SendAll();
+        //canMap->SendAll();
+        
+        // Test CAN frame - remove after CAN confirmed working
+        //uint32_t testData[2] = { 0x12345678, 0xDEADBEEF };
+        //can->Send(0x123, testData, 8);
+        PRINTF("CAN RX count: %d\n", (uint16_t)canRxCount);
+        PRINTF("CAN ISR count: %d\n", (uint16_t)canIsrCount);
+        PRINTF("CAN Status count: %d\n", (uint16_t)canStatusCount);
+        PRINTF("CAN Last Cause: %d\n", (uint16_t)canLastCause);
+        PRINTF("SDO Param Change: %d\n", (uint16_t)paramChangeCount);
+        PRINTF("data[0] hi=0x%x lo=0x%x\n", 
+            (uint16_t)(canLastMsgId >> 16),
+            (uint16_t)canLastMsgId);
+        PRINTF("data[1] hi=0x%x lo=0x%x\n", 
+            (uint16_t)(canLastStatus >> 16),
+            (uint16_t)canLastStatus);
+        PRINTF("callback count: %d\n", can->GetCallbackCount());
 
-        PRINTF(
-            "PhaseA Current = %d, PhaseB Current = %d, Resolver Sine = %u, "
-            "Resolver Cosine = %u\n",
+        PRINTF("PhaseA Current = %d, PhaseB Current = %d, Resolver Sine = %u, Resolver Cosine = %u\n",
             Param::Get(Param::il1),
             Param::Get(Param::il2),
             MotorAnalogCapture::ResolverSine(),
@@ -252,27 +375,40 @@ void main(void)
         PRINTF("GD0: S1=0x%x S2=0x%x S3=0x%x\n", gd_status1[0], gd_status2[0], gd_status3[0]);
         PRINTF("GD1: S1=0x%x S2=0x%x S3=0x%x\n", gd_status1[1], gd_status2[1], gd_status3[1]);
         PRINTF("GD2: S1=0x%x S2=0x%x S3=0x%x\n", gd_status1[2], gd_status2[2], gd_status3[2]);
-
         int32_t currentLoad = PwmGeneration::GetCpuLoad();
         PRINTF("PWM cycles: %d\n", currentLoad - lastLoad);
         lastLoad = currentLoad;
-
 
         // Blink pattern: 2x green, 2x red, Repeat
         // States 0,1 = green on/off, States 2,3 = green on/off,
         // States 4,5 = red on/off, States 6,7 = red on/off
         switch (blinkState)
         {
-        case 0: GPIO_writePin(heartbeatLedPin, 0);  GPIO_writePin(heartbeatLedPin2, 1); break;
-        case 1: GPIO_writePin(heartbeatLedPin, 1);  GPIO_writePin(heartbeatLedPin2, 1); break;
-        case 2: GPIO_writePin(heartbeatLedPin, 0);  GPIO_writePin(heartbeatLedPin2, 1); break;
-        case 3: GPIO_writePin(heartbeatLedPin, 1);  GPIO_writePin(heartbeatLedPin2, 1); break;
-        case 4: GPIO_writePin(heartbeatLedPin, 1);  GPIO_writePin(heartbeatLedPin2, 0); break;
-        case 5: GPIO_writePin(heartbeatLedPin, 1);  GPIO_writePin(heartbeatLedPin2, 1); break;
-        case 6: GPIO_writePin(heartbeatLedPin, 1);  GPIO_writePin(heartbeatLedPin2, 0); break;
-        case 7: GPIO_writePin(heartbeatLedPin, 1);  GPIO_writePin(heartbeatLedPin2, 1); break;
-        default: blinkState = -1; break;
+            case 0: GPIO_writePin(heartbeatLedPin, 0);  GPIO_writePin(heartbeatLedPin2, 1); break;
+            case 1: GPIO_writePin(heartbeatLedPin, 1);  GPIO_writePin(heartbeatLedPin2, 1); break;
+            case 2: GPIO_writePin(heartbeatLedPin, 0);  GPIO_writePin(heartbeatLedPin2, 1); break;
+            case 3: GPIO_writePin(heartbeatLedPin, 1);  GPIO_writePin(heartbeatLedPin2, 1); break;
+            case 4: GPIO_writePin(heartbeatLedPin, 1);  GPIO_writePin(heartbeatLedPin2, 0); break;
+            case 5: GPIO_writePin(heartbeatLedPin, 1);  GPIO_writePin(heartbeatLedPin2, 1); break;
+            case 6: GPIO_writePin(heartbeatLedPin, 1);  GPIO_writePin(heartbeatLedPin2, 0); break;
+            case 7: GPIO_writePin(heartbeatLedPin, 1);  GPIO_writePin(heartbeatLedPin2, 1); break;
+            default: blinkState = -1; break;
         }
         blinkState = (blinkState + 1) % 8;
+        if(rxPending)
+        {
+            rxPending = 0;
+                PRINTF("RX[%d]: %02X %02X %02X %02X %02X %02X %02X %02X\r\n",
+                   (uint16_t)canRxCount,
+                   rxBytes[0], rxBytes[1], rxBytes[2], rxBytes[3],
+                   rxBytes[4], rxBytes[5], rxBytes[6], rxBytes[7]);
+        }
+
+        if(canStatusPending)
+        {
+            canStatusPending = 0;
+            PRINTF("CAN STATUS: 0x%04x\r\n", (uint16_t)canStatus);
+        }
+
     }
 }

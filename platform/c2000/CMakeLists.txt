@@ -21,3 +21,6 @@ add_subdirectory(pmicdrivertest)
 
 # Dump Tesla M3 EEPROM
 add_subdirectory(dumpeeprom)
+
+# CAN test Tesla M3
+add_subdirectory(cantest)

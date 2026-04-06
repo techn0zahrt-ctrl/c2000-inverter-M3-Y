@@ -142,8 +142,13 @@ void CanSdo::InitiateSDOTransfer(uint8_t req, uint8_t nodeId, uint16_t index, ui
 //http://www.byteme.org.uk/canopenparent/canopen/sdo-service-data-objects-canopen/
 void CanSdo::ProcessSDO(uint32_t data[2])
 {
+   extern volatile uint32_t canRxCount;
+   //swapSdoBytes(data);
+   canRxCount = 0xDEAD;
+   
    SdoFrame *sdo = (SdoFrame*)data;
-
+   canRxCount = sdo->index;
+   
    if ((sdo->cmd & SDO_REQUEST_SEGMENT) == SDO_REQUEST_SEGMENT)
    {
       const int bytesPerMessage = 7;
@@ -239,6 +244,12 @@ void CanSdo::ProcessSDO(uint32_t data[2])
       if (!ProcessSpecialSDOObjects(sdo))
          return; //Don't send reply when handled by user space
    }
+   canRxCount = 0xBEEF;
+   extern volatile uint32_t canLastMsgId;
+   canLastMsgId = data[0]; // repurpose to debug
+   extern volatile uint32_t canLastStatus;
+   canLastStatus = data[1];
+   //swapSdoBytes(data);
    canHardware->Send(0x580 + nodeId, data);
 }
 

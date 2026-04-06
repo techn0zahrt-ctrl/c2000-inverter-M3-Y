@@ -22,9 +22,8 @@
 #include "inc/hw_ints.h"
 
 // TX uses mailbox 32; RX mailboxes are 1..31
-#define TX_MSG_OBJ_ID  32U
-// Wildcard "receive-everything" mailbox occupies slot 31
-#define RX_CATCH_ALL_OBJ_ID  31U
+#define TX_MSG_OBJ_ID  32U //1 for now change back to 32 when fixed
+//#define RX_MSG_OBJ_ID  2U //1 for now change back to 32 when fixed
 
 C2000Can* C2000Can::instanceA = 0;
 C2000Can* C2000Can::instanceB = 0;
@@ -46,6 +45,9 @@ C2000Can::C2000Can(uint32_t canBase)
    {
       GPIO_setPinConfig(DEVICE_GPIO_CFG_CANRXA);
       GPIO_setPinConfig(DEVICE_GPIO_CFG_CANTXA);
+      GPIO_setDirectionMode(5U, GPIO_DIR_MODE_IN);
+      GPIO_setDirectionMode(4U, GPIO_DIR_MODE_OUT);
+      GPIO_setQualificationMode(5U, GPIO_QUAL_ASYNC);
       instanceA = this;
    }
    else // CANB_BASE
@@ -56,9 +58,19 @@ C2000Can::C2000Can(uint32_t canBase)
    }
 
    CAN_initModule(base);
+}
 
+void C2000Can::SetBaudrate(enum baudrates baudrate)
+{
+   CAN_setBitRate(base, DEVICE_SYSCLK_FREQ, baudRateTable[baudrate], 16U);
+   ConfigureFilters();
+   RegisterInterrupts();
+}
+
+void C2000Can::RegisterInterrupts()
+{
    // Register and enable the CAN interrupt in the PIE
-   if (canBase == CANA_BASE)
+   if (base == CANA_BASE)
    {
       Interrupt_register(INT_CANA0, &canAISR);
       Interrupt_enable(INT_CANA0);
@@ -68,36 +80,26 @@ C2000Can::C2000Can(uint32_t canBase)
       Interrupt_register(INT_CANB0, &canBISR);
       Interrupt_enable(INT_CANB0);
    }
-
    CAN_enableInterrupt(base, CAN_INT_IE0 | CAN_INT_ERROR | CAN_INT_STATUS);
    CAN_enableGlobalInterrupt(base, CAN_GLOBAL_INT_CANINT0);
-}
-
-void C2000Can::SetBaudrate(enum baudrates baudrate)
-{
-   CAN_setBitRate(base, DEVICE_SYSCLK_FREQ, baudRateTable[baudrate], 16U);
    CAN_startModule(base);
-
-   // Set up a catch-all RX mailbox with no ID filtering
-   CAN_setupMessageObject(base, RX_CATCH_ALL_OBJ_ID, 0U,
-                          CAN_MSG_FRAME_STD,
-                          CAN_MSG_OBJ_TYPE_RX,
-                          0U,
-                          CAN_MSG_OBJ_RX_INT_ENABLE | CAN_MSG_OBJ_NO_FLAGS,
-                          8U);
-
-   // Configure the specific user-registered ID filters
-   ConfigureFilters();
 }
 
 void C2000Can::Send(uint32_t canId, uint32_t data[2], uint8_t len)
 {
-   // Pack the two uint32_t words into an 8-byte uint16_t array.
-   // CAN driverlib expects uint16_t* with one byte per element (lower byte used).
-   uint16_t buf[8];
-   const uint8_t* src = (const uint8_t*)data;
-   for (int i = 0; i < 8; i++)
-      buf[i] = src[i];
+   // On C28x, HWREGB in CAN_writeDataReg performs 16-bit word writes because
+   // uint8_t = uint16_t (CHAR_BIT=16). Each write covers two CAN data bytes.
+   // Register layout (word offsets from IF1DATA base):
+   // Pack two bytes per element so each 16-bit write fills both byte slots.
+   uint16_t buf[8] = {0};
+   //buf[1] = (data[0] & 0xFF) | ((data[0] >> 8) & 0xFF) << 8;
+   //buf[3] = ((data[0] >> 16) & 0xFF) | ((data[0] >> 24) & 0xFF) << 8;
+   //buf[5] = (data[1] & 0xFF) | ((data[1] >> 8) & 0xFF) << 8;
+   //buf[7] = ((data[1] >> 16) & 0xFF) | ((data[1] >> 24) & 0xFF) << 8;
+   buf[1] = (data[0] & 0xFF) | (((data[0] >> 8) & 0xFF) << 8);  // unchanged
+   buf[3] = (((data[0] >> 16) & 0xFF) << 8) | (((data[0] >> 24) & 0xFF));  // swapped
+   buf[5] = (data[1] & 0xFF) | (((data[1] >> 8) & 0xFF) << 8);  // unchanged
+   buf[7] = (((data[1] >> 16) & 0xFF) << 8) | (((data[1] >> 24) & 0xFF));  // swapped
 
    bool extended = (canId & CAN_FORCE_EXTENDED) != 0U;
    uint32_t rawId = canId & ~CAN_FORCE_EXTENDED;
@@ -121,7 +123,8 @@ void C2000Can::ConfigureFilters()
    {
       uint32_t id   = userIds[i] & ~CAN_FORCE_EXTENDED;
       bool extended = (userIds[i] & CAN_FORCE_EXTENDED) != 0U;
-      uint32_t mask = userMasks[i];
+      //uint32_t mask = userMasks[i];
+      uint32_t mask = extended ? 0x1FFFFFFFU : 0x7FFU;
       uint32_t flags = CAN_MSG_OBJ_RX_INT_ENABLE | CAN_MSG_OBJ_USE_ID_FILTER;
       if (extended)
          flags |= CAN_MSG_OBJ_USE_EXT_FILTER;
@@ -134,21 +137,45 @@ void C2000Can::ConfigureFilters()
                              flags,
                              8U);
    }
+   /*// Set up TX mailbox simple
+   CAN_setupMessageObject(base, TX_MSG_OBJ_ID,
+                           0U,
+                           CAN_MSG_FRAME_STD,
+                           CAN_MSG_OBJ_TYPE_TX,
+                           0U,
+                           CAN_MSG_OBJ_NO_FLAGS,
+                           8U);
+   CAN_setupMessageObject(base, RX_MSG_OBJ_ID,
+                           0x601U,
+                           CAN_MSG_FRAME_STD,
+                           CAN_MSG_OBJ_TYPE_RX,
+                           0x7FFU,
+                           CAN_MSG_OBJ_USE_ID_FILTER | CAN_MSG_OBJ_RX_INT_ENABLE,
+                           8U);
+*/
 }
 
 void C2000Can::HandleMessage()
 {
    uint32_t cause = CAN_getInterruptCause(base);
+   extern volatile uint32_t canRxCount;
+   extern volatile uint32_t canIsrCount;
+   extern volatile uint32_t canStatusCount;
+   extern volatile uint32_t canLastCause;
+   extern volatile uint32_t canLastStatus;
+
+   canIsrCount++;
+   canLastCause = cause;
 
    if (cause == CAN_INT_INT0ID_STATUS)
    {
-      // Status interrupt — clear it and return
+      canStatusCount++;
+      canLastStatus = CAN_getStatus(base);
       CAN_clearInterruptStatus(base, CAN_INT_INT0ID_STATUS);
       CAN_clearGlobalInterruptStatus(base, CAN_GLOBAL_INT_CANINT0);
       return;
    }
 
-   // cause contains the message object number that triggered the interrupt
    if (cause < 1U || cause > 31U)
    {
       CAN_clearGlobalInterruptStatus(base, CAN_GLOBAL_INT_CANINT0);
@@ -156,20 +183,36 @@ void C2000Can::HandleMessage()
    }
 
    uint16_t buf[8] = {0};
-   CAN_MsgFrameType frameType;
-   uint32_t msgId = 0;
 
-   if (CAN_readMessageWithID(base, cause, &frameType, &msgId, buf))
+   if (CAN_readMessage(base, cause, buf))
    {
-      // Repack uint16_t driverlib buffer into uint32_t[2] for HandleRx
-      uint32_t data[2];
-      uint8_t* dst = (uint8_t*)data;
-      for (int i = 0; i < 8; i++)
-         dst[i] = (uint8_t)buf[i];
+      canRxCount++;
 
-      if (frameType == CAN_MSG_FRAME_EXT)
+      uint32_t arb = HWREG(base + CAN_O_IF2ARB);
+      uint32_t msgId;
+      bool extended = (arb & CAN_IF2ARB_XTD) != 0U;
+
+      if (extended)
+      {
+         msgId = arb & CAN_IF2ARB_ID_M;
          msgId |= CAN_FORCE_EXTENDED;
+      }
+      else
+      {
+         msgId = (arb >> CAN_IF2ARB_STD_ID_S) & 0x7FFU;
+      }
+      extern volatile uint32_t canLastMsgId;
+      canLastMsgId = msgId;
 
+      uint32_t data[2];
+      //data[0] = ((uint32_t)buf[3] << 16) | (uint32_t)buf[1];
+      //data[1] = ((uint32_t)buf[7] << 16) | (uint32_t)buf[5];
+      data[0] = (((uint32_t)((buf[3] << 8) | (buf[3] >> 8))) << 16) | (uint32_t)buf[1];
+      data[1] = (((uint32_t)((buf[7] << 8) | (buf[7] >> 8))) << 16) | (uint32_t)buf[5];
+      //data[0] = ((uint32_t)((buf[3] >> 8) | (buf[3] << 8)) << 16) | 
+      //         (uint32_t)((buf[1] >> 8) | (buf[1] << 8));
+      //data[1] = ((uint32_t)((buf[7] >> 8) | (buf[7] << 8)) << 16) | 
+      //         (uint32_t)((buf[5] >> 8) | (buf[5] << 8));
       CanHardware::HandleRx(msgId, data, 8U);
    }
 
@@ -181,10 +224,12 @@ extern "C" __interrupt void canAISR(void)
 {
    if (C2000Can::instanceA != 0)
       C2000Can::instanceA->HandleMessage();
+   Interrupt_clearACKGroup(INTERRUPT_ACK_GROUP9);
 }
 
 extern "C" __interrupt void canBISR(void)
 {
    if (C2000Can::instanceB != 0)
       C2000Can::instanceB->HandleMessage();
+   Interrupt_clearACKGroup(INTERRUPT_ACK_GROUP9);
 }
