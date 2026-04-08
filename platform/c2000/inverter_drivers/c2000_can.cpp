@@ -28,6 +28,30 @@
 C2000Can* C2000Can::instanceA = 0;
 C2000Can* C2000Can::instanceB = 0;
 
+static void canPack8(uint16_t *buf, const uint8_t *d)
+{
+    buf[0] = 0;
+    buf[1] = ((uint16_t)d[0]) | (((uint16_t)d[1]) << 8);
+    buf[2] = 0;
+    buf[3] = ((uint16_t)d[2]) | (((uint16_t)d[3]) << 8);
+    buf[4] = 0;
+    buf[5] = ((uint16_t)d[4]) | (((uint16_t)d[5]) << 8);
+    buf[6] = 0;
+    buf[7] = ((uint16_t)d[6]) | (((uint16_t)d[7]) << 8);
+}
+
+static void canUnpack8(const uint16_t *buf, uint8_t *d)
+{
+    d[0] = (uint8_t)(buf[1] & 0xFF);
+    d[1] = (uint8_t)((buf[1] >> 8) & 0xFF);
+    d[2] = (uint8_t)(buf[3] & 0xFF);
+    d[3] = (uint8_t)((buf[3] >> 8) & 0xFF);
+    d[4] = (uint8_t)(buf[5] & 0xFF);
+    d[5] = (uint8_t)((buf[5] >> 8) & 0xFF);
+    d[6] = (uint8_t)(buf[7] & 0xFF);
+    d[7] = (uint8_t)((buf[7] >> 8) & 0xFF);
+}
+
 static const uint32_t baudRateTable[] =
 {
     125000U,   // Baud125
@@ -91,15 +115,21 @@ void C2000Can::Send(uint32_t canId, uint32_t data[2], uint8_t len)
    // uint8_t = uint16_t (CHAR_BIT=16). Each write covers two CAN data bytes.
    // Register layout (word offsets from IF1DATA base):
    // Pack two bytes per element so each 16-bit write fills both byte slots.
+   uint8_t bytes[8];
+   bytes[0] = data[0] & 0xFF;
+   bytes[1] = (data[0] >> 8) & 0xFF;
+   bytes[2] = (data[0] >> 16) & 0xFF;
+   bytes[3] = (data[0] >> 24) & 0xFF;
+   bytes[4] = data[1] & 0xFF;
+   bytes[5] = (data[1] >> 8) & 0xFF;
+   bytes[6] = (data[1] >> 16) & 0xFF;
+   bytes[7] = (data[1] >> 24) & 0xFF;
+   extern volatile uint32_t canLastMsgId;
+   extern volatile uint32_t canLastStatus;
+   //canLastMsgId = ((uint32_t)bytes[1] << 8) | bytes[0];
+   //canLastStatus = ((uint32_t)bytes[3] << 8) | bytes[2];
    uint16_t buf[8] = {0};
-   //buf[1] = (data[0] & 0xFF) | ((data[0] >> 8) & 0xFF) << 8;
-   //buf[3] = ((data[0] >> 16) & 0xFF) | ((data[0] >> 24) & 0xFF) << 8;
-   //buf[5] = (data[1] & 0xFF) | ((data[1] >> 8) & 0xFF) << 8;
-   //buf[7] = ((data[1] >> 16) & 0xFF) | ((data[1] >> 24) & 0xFF) << 8;
-   buf[1] = (data[0] & 0xFF) | (((data[0] >> 8) & 0xFF) << 8);  // unchanged
-   buf[3] = (((data[0] >> 16) & 0xFF) << 8) | (((data[0] >> 24) & 0xFF));  // swapped
-   buf[5] = (data[1] & 0xFF) | (((data[1] >> 8) & 0xFF) << 8);  // unchanged
-   buf[7] = (((data[1] >> 16) & 0xFF) << 8) | (((data[1] >> 24) & 0xFF));  // swapped
+   canPack8(buf, bytes);
 
    bool extended = (canId & CAN_FORCE_EXTENDED) != 0U;
    uint32_t rawId = canId & ~CAN_FORCE_EXTENDED;
@@ -158,19 +188,9 @@ void C2000Can::ConfigureFilters()
 void C2000Can::HandleMessage()
 {
    uint32_t cause = CAN_getInterruptCause(base);
-   extern volatile uint32_t canRxCount;
-   extern volatile uint32_t canIsrCount;
-   extern volatile uint32_t canStatusCount;
-   extern volatile uint32_t canLastCause;
-   extern volatile uint32_t canLastStatus;
-
-   canIsrCount++;
-   canLastCause = cause;
 
    if (cause == CAN_INT_INT0ID_STATUS)
    {
-      canStatusCount++;
-      canLastStatus = CAN_getStatus(base);
       CAN_clearInterruptStatus(base, CAN_INT_INT0ID_STATUS);
       CAN_clearGlobalInterruptStatus(base, CAN_GLOBAL_INT_CANINT0);
       return;
@@ -186,8 +206,6 @@ void C2000Can::HandleMessage()
 
    if (CAN_readMessage(base, cause, buf))
    {
-      canRxCount++;
-
       uint32_t arb = HWREG(base + CAN_O_IF2ARB);
       uint32_t msgId;
       bool extended = (arb & CAN_IF2ARB_XTD) != 0U;
@@ -201,18 +219,12 @@ void C2000Can::HandleMessage()
       {
          msgId = (arb >> CAN_IF2ARB_STD_ID_S) & 0x7FFU;
       }
-      extern volatile uint32_t canLastMsgId;
-      canLastMsgId = msgId;
 
+      uint8_t bytes[8];
+      canUnpack8(buf, bytes);
       uint32_t data[2];
-      //data[0] = ((uint32_t)buf[3] << 16) | (uint32_t)buf[1];
-      //data[1] = ((uint32_t)buf[7] << 16) | (uint32_t)buf[5];
-      data[0] = (((uint32_t)((buf[3] << 8) | (buf[3] >> 8))) << 16) | (uint32_t)buf[1];
-      data[1] = (((uint32_t)((buf[7] << 8) | (buf[7] >> 8))) << 16) | (uint32_t)buf[5];
-      //data[0] = ((uint32_t)((buf[3] >> 8) | (buf[3] << 8)) << 16) | 
-      //         (uint32_t)((buf[1] >> 8) | (buf[1] << 8));
-      //data[1] = ((uint32_t)((buf[7] >> 8) | (buf[7] << 8)) << 16) | 
-      //         (uint32_t)((buf[5] >> 8) | (buf[5] << 8));
+      data[0] = (uint32_t)bytes[0] | ((uint32_t)bytes[1] << 8) | ((uint32_t)bytes[2] << 16) | ((uint32_t)bytes[3] << 24);
+      data[1] = (uint32_t)bytes[4] | ((uint32_t)bytes[5] << 8) | ((uint32_t)bytes[6] << 16) | ((uint32_t)bytes[7] << 24);
       CanHardware::HandleRx(msgId, data, 8U);
    }
 

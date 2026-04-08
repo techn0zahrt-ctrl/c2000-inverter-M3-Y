@@ -87,6 +87,40 @@
             "valuesFormatting": "parseText"
         },
         {
+            "name": "Debug C2000 Inverter",
+            "type": "ccs-debug",
+            "request": "launch",
+            "targetConfig": "C:\\Users\\techno\\projects\\c2000-inverter\\platform\\c2000\\blinky\\Tesla RDU.ccxml",
+            "connections": [
+                {
+                    "name": "Texas Instruments XDS100v2 USB Debug Probe",
+                    "cores": [
+                        {
+                            "name": "C28xx_CPU1",
+                            "program": "C:\\Users\\techno\\projects\\c2000-inverter\\build\\c2000\\platform\\c2000\\inverter\\inverter",
+                            "sourceDirs": [
+                                "C:\\Users\\techno\\projects\\c2000-inverter\\platform\\c2000\\inverter",
+                                "C:\\Users\\techno\\projects\\c2000-inverter\\platform\\c2000\\inverter_drivers",
+                                "C:\\Users\\techno\\projects\\c2000-inverter\\platform\\c2000\\include",
+                                "C:\\Users\\techno\\projects\\c2000-inverter\\platform\\c2000\\device_support\\source",
+                                "C:\\Users\\techno\\projects\\c2000-inverter\\platform\\c2000\\driverlib",
+                                "C:\\Users\\techno\\projects\\c2000-inverter\\libopeninv\\src",
+                                "C:\\Users\\techno\\projects\\c2000-inverter\\libopeninv\\include",
+                                "C:\\Users\\techno\\projects\\c2000-inverter\\include"
+                            ],
+                            "sourceMappings": [
+                                {
+                                    "module": "C:\\Users\\techno\\projects\\c2000-inverter\\build\\c2000\\platform\\c2000\\inverter\\inverter",
+                                    "compilationDir": "/mnt/c/Users/techno/projects/c2000-inverter",
+                                    "sourceDir": "C:\\Users\\techno\\projects\\c2000-inverter"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        },
+        {
             "name": "Debug CMake STM32F1",
             "type": "cppdbg",
             "request": "launch",

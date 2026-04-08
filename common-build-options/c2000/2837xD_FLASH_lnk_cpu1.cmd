@@ -89,7 +89,8 @@ SECTIONS
    .init_array      : > FLASHA,    PAGE = 0
    .const           : >> FLASHI | FLASHJ,   PAGE = 0
    .data            : >> RAMLS5 | RAMGS0 | RAMGS1,    PAGE = 1
-   .sysmem          : > RAMLS5,    PAGE = 1
+   .sysmem          : > RAMGS11,    PAGE = 1
+   .printBuffer     : >> RAMGS12 | RAMGS13,    PAGE = 1
 #else
    .pinit           : > FLASHA,    PAGE = 0
    .ebss            : > RAMLS5,    PAGE = 1

@@ -18,6 +18,7 @@
  */
 #ifndef CANSDO_H
 #define CANSDO_H
+
 #include "params.h"
 #include "printf.h"
 #include "canhardware.h"
@@ -55,7 +56,6 @@ class CanSdo: CanCallback, public IPutChar
       };
       #endif
 
-      /** Default constructor */
       explicit CanSdo(CanHardware* hw, CanMap* cm = 0);
       CanHardware* GetHardware() { return canHardware; }
       void HandleClear() override;
@@ -70,6 +70,16 @@ class CanSdo: CanCallback, public IPutChar
       void SendSdoReply(SdoFrame* sdoFrame);
       void PutChar(char c) override;
       void TriggerTimeout(int callingFrequency);
+      void SetPrintCallback(void (*cb)(CanSdo*, int)) { printCallback = cb; }
+
+      // Call this when your dump/JSON producer is fully done writing chars
+      void EndPrint() { printDone = true; }
+      uint32_t GetPrintFree() const;
+      bool GetPrintOverflow() const;
+      void ResetPrintOverflow();
+      void ClearPrintRequest();
+
+      // Debug accessors
 
    private:
       CanHardware* canHardware;
@@ -77,13 +87,28 @@ class CanSdo: CanCallback, public IPutChar
       uint8_t nodeId;
       uint8_t remoteNodeId;
       int printRequest;
-      //We use a ring buffer with non-wrapping index. This limits us to 4 GB, huh!
-      //In the beginning printBufIn starts at 0 and printBufOut at sizeof(printBuffer) (e.g. 64)
-      //All addressing of printBuffer is modulo buffer size
-      volatile char printBuffer[64]; //Must be a power of 2 for efficient modulo calculation
+
+      // Ring buffer with monotonically increasing indices.
+      // Physical access is modulo buffer capacity.
+      // Empty when printByteIn == printByteOut.
+      // Full when (printByteIn - printByteOut) == capacity.
       volatile uint32_t printByteIn;
       volatile uint32_t printByteOut;
-      volatile int printTimeout; //remaining time to wait
+      volatile int printTimeout;
+
+      volatile bool printDone;
+      volatile bool printOverflow;
+
+      // Debug counters
+      volatile uint32_t printCharsPushed;
+      volatile uint32_t printCharsPopped;
+      volatile uint32_t printOverflowCount;
+      volatile uint32_t printSegmentRequests;
+      volatile uint32_t printLastSegmentBytes;
+      volatile uint32_t printStartCount;
+      volatile uint32_t printDoneCount;
+      volatile uint32_t printMaxDepth;
+
       Param::PARAM_NUM mapParam;
       uint32_t mapId;
       CanMap::CANPOS mapInfo;
@@ -91,6 +116,7 @@ class CanSdo: CanCallback, public IPutChar
       uint32_t sdoReplyData;
       SdoFrame pendingUserSpaceSdoFrame;
       bool pendingUserSpaceSdo;
+      void (*printCallback)(CanSdo*, int);
 
       void ProcessSDO(uint32_t data[2]);
       bool ProcessSpecialSDOObjects(SdoFrame *sdo);

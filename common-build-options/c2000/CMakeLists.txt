@@ -21,18 +21,43 @@ endif()
 target_include_directories(platform_options INTERFACE
     "${CMAKE_SOURCE_DIR}/platform/c2000/include"
     "${CMAKE_SOURCE_DIR}/platform/c2000/inverter_drivers")
-target_compile_options(
-  platform_options
-  INTERFACE -ml
-            -mt
-            --cla_support=cla1
-            --float_support=fpu32
-            --fp_mode=relaxed
-            --printf_support=full
-            --emit_warnings_as_errors
-            --tmu_support=tmu0
-            --vcu_support=vcu2
-            --advice:performance=all)
+# Debug vs Release flags
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    message(STATUS "Building in DEBUG mode")
+
+    target_compile_options(
+      platform_options
+      INTERFACE -ml
+                -mt
+                --cla_support=cla1
+                --float_support=fpu32
+                --fp_mode=relaxed
+                --printf_support=full
+                --emit_warnings_as_errors
+                --tmu_support=tmu0
+                --vcu_support=vcu2
+                --advice:performance=all
+                --symdebug:dwarf
+                --opt_level=off)
+
+else()
+    message(STATUS "Building in RELEASE mode")
+
+    target_compile_options(
+      platform_options
+      INTERFACE -ml
+                -mt
+                --cla_support=cla1
+                --float_support=fpu32
+                --fp_mode=relaxed
+                --printf_support=full
+                --emit_warnings_as_errors
+                --tmu_support=tmu0
+                --vcu_support=vcu2
+                --advice:performance=all
+                --symdebug:dwarf
+                -O4)
+endif()
 if(FLASH_BUILD)
     set(LINKER_CMD "${CMAKE_SOURCE_DIR}/common-build-options/c2000/2837xD_FLASH_lnk_cpu1.cmd")
 else()

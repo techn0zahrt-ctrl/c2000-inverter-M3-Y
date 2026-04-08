@@ -1,0 +1,41 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Tesla RDU.ccxml",
+            "type": "ccs-debug",
+            "request": "launch",
+            "targetConfig": "${targetConfigFolder}\\Tesla RDU.ccxml",
+            "connections": [
+                {
+                    "name": "Texas Instruments XDS100v2 USB Debug Probe",
+                    "cores": [
+                        {
+                            "name": "C28xx_CPU1",
+                            "program": "C:\\Users\\techno\\projects\\c2000-inverter\\build\\c2000\\platform\\c2000\\inverter\\inverter",
+                            "sourceDirs": [
+                                "C:\\Users\\techno\\projects\\c2000-inverter\\platform\\c2000\\inverter",
+                                "C:\\Users\\techno\\projects\\c2000-inverter\\platform\\c2000\\inverter_drivers",
+                                "C:\\Users\\techno\\projects\\c2000-inverter\\libopeninv\\src",
+                                "C:\\Users\\techno\\projects\\c2000-inverter\\libopeninv\\include",
+                                "C:\\Users\\techno\\projects\\c2000-inverter\\include"
+                            ],
+                            "sourceMappings": [
+                                {
+                                    "module": "C:\\Users\\techno\\projects\\c2000-inverter\\build\\c2000\\platform\\c2000\\inverter\\inverter",
+                                    "compilationDir": "/mnt/c/Users/techno/projects/c2000-inverter",
+                                    "sourceDir": "C:\\Users\\techno\\projects\\c2000-inverter"
+                                },
+                                {
+                                    "module": "C:\\Users\\techno\\projects\\c2000-inverter\\build\\c2000\\libopeninv\\libopeninv.a",
+                                    "compilationDir": "/mnt/c/Users/techno/projects/c2000-inverter",
+                                    "sourceDir": "C:\\Users\\techno\\projects\\c2000-inverter"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}
