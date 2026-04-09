@@ -25,11 +25,6 @@
                                     "module": "C:\\Users\\techno\\projects\\c2000-inverter\\build\\c2000\\platform\\c2000\\inverter\\inverter",
                                     "compilationDir": "/mnt/c/Users/techno/projects/c2000-inverter",
                                     "sourceDir": "C:\\Users\\techno\\projects\\c2000-inverter"
-                                },
-                                {
-                                    "module": "C:\\Users\\techno\\projects\\c2000-inverter\\build\\c2000\\libopeninv\\libopeninv.a",
-                                    "compilationDir": "/mnt/c/Users/techno/projects/c2000-inverter",
-                                    "sourceDir": "C:\\Users\\techno\\projects\\c2000-inverter"
                                 }
                             ]
                         }

@@ -140,6 +140,13 @@ void main(void)
     GPIO_setDirectionMode(DEVICE_GPIO_PIN_GATE_PSU_ENABLE, GPIO_DIR_MODE_OUT);
     PRINTF("Gate Drive PSU ON\n");
 
+    // Wait for gate driver isolated-side supplies (VH/VL) to ramp up and
+    // stabilise before initialising the STGAP1AS chips.  Without this delay
+    // the remote (isolated-side) registers are unreadable and Init() fails.
+    // The gatedrivertest reference uses 1 second; 500 ms is sufficient in
+    // practice but can be tuned to match the PSU soft-start time.
+    DEVICE_DELAY_US(500000);
+
     //
     // Set up the gate drivers for PWM operation
     //
@@ -282,9 +289,9 @@ void main(void)
             PRINTF("polepairs raw = %d\r\n", (uint16_t)Param::Get(Param::polepairs));
             PRINTF("canspeed raw = %d\r\n", (uint16_t)Param::Get(Param::canspeed));
             PRINTF("nodeid raw = %d\r\n", (uint16_t)Param::Get(Param::nodeid));
-            float myFloat = 123.456f;
+            //float myFloat = 123.456f;
             // Ensure "full" printf support is enabled in project properties
-            PRINTF("The value is: %f\n", (float)myFloat);
+            //PRINTF("The value is: %f\n", (float)myFloat);
             //PRINTF("data[1] hi=0x%x lo=0x%x\n", 
             //    (uint16_t)(canLastStatus >> 16),
             //    (uint16_t)canLastStatus);

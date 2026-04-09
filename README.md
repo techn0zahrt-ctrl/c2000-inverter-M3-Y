@@ -22,7 +22,7 @@ All six known Tesla Model 3/Y inverter variants (both front and rear drive units
 ### Confirmed Hardware
 
 * Tesla Model 3 / Y front drive units (induction motor, TMS320F28377D)
-* Tesla Model 3 / Y rear drive units 1120980-00-G, 1120990-00-G (PMSM, TMS320F28377D)
+* Tesla Model 3 / Y rear drive units 1120980-00-G, 1120990-00-G (PMSM, TMS320F28377D) — RDU validated for CAN/SDO communication
 * Texas Instruments LAUNCHXL-F28379D development board (used as JTAG probe and for development)
 
 ### JTAG Connection
@@ -30,6 +30,11 @@ All six known Tesla Model 3/Y inverter variants (both front and rear drive units
 Connect using the LAUNCHXL-F28379D as an external XDS100v2 probe. See [JTAG cable documentation](docs/Tesla-M3-JTAG-cable.md).
 
 **Critical**: Always use `Load RAM only` in CCS flash settings. Writing to flash will erase Tesla firmware.
+
+## Active Development Branch
+
+Active development is on the `portable-cpp` branch of the fork
+[techn0zahrt-ctrl/c2000-inverter-M3-Y](https://github.com/techn0zahrt-ctrl/c2000-inverter-M3-Y/tree/portable-cpp).
 
 ## Status
 
@@ -56,9 +61,21 @@ Connect using the LAUNCHXL-F28379D as an external XDS100v2 probe. See [JTAG cabl
 * [x] WSL2/Ubuntu build environment support
 * [x] First hardware validation on Tesla FDU inverter (RAM boot via JTAG)
 * [x] PMIC initialization confirmed on hardware
-* [x] Gate driver initialization confirmed on hardware  
+* [x] Gate driver initialization confirmed on hardware
 * [x] Main loop executing with LED heartbeat on hardware
+* [x] CAN hardware driver working (GPIO4/5 for Tesla M3 RDU)
+* [x] SDO communication working — parameter read/write/dumpall via oic tool
+* [x] JSON parameter database transfer working (oic dumpall)
+* [x] Parameter persistence via SPI EEPROM (Microchip 25LC256) working
+* [x] oic tool fully compatible — dumpall, read, write, cmd save/load all functional
+* [x] Debug environment working (CCS VS Code extension with source path mapping)
+* [x] WSL2 CMake build with debug and release configurations
 
+### In Progress
+* [ ] Gate driver initialization — SPI communication working; config register verification under investigation (CONFIG-mode read ordering)
+* [ ] Extended hardware validation with motor running under load
+
+### Not Yet Started
 * [ ] CAN firmware upgrade over openinverter CAN protocol
 * [ ] High Voltage InterLock (HVIL) support
 * [ ] Front drive unit (SINE/induction) hardware validation

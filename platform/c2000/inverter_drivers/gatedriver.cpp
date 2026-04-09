@@ -116,7 +116,12 @@ bool GateDriver::Init()
 {
     sm_interface.Init();
     SetupGateDrivers();
-    if (VerifyGateDriverConfig())
+    // CFG registers can only be read back during CONFIG mode (before
+    // STOP_CONFIG).  Verify first, then close configuration.
+    bool verified = VerifyGateDriverConfig();
+    SendCommand(STGAP1AS_CMD_STOP_CONFIG);
+    DEVICE_DELAY_US(StopConfigDelay);
+    if (verified)
     {
         return !IsFaulty();
     }
@@ -186,9 +191,8 @@ void GateDriver::SetupGateDrivers()
         WriteRegister(GateDriverRegisterSetup[i]);
         DEVICE_DELAY_US(OtherCommandDelay);
     }
-
-    SendCommand(STGAP1AS_CMD_STOP_CONFIG);
-    DEVICE_DELAY_US(StopConfigDelay);
+    // STOP_CONFIG is sent by Init() after VerifyGateDriverConfig(), because
+    // CFG registers can only be read back during CONFIG mode.
 }
 
 /**
