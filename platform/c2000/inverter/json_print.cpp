@@ -5,13 +5,79 @@
 #include "my_fp.h"
 #include <string.h>
 
+#include <stdint.h>
+
+/*
+ * Convert float to string with fixed number of decimal places.
+ * 
+ * @param buf       Destination buffer (must be large enough)
+ * @param val       Float value to convert
+ * @param decimals  Number of digits after decimal point (0..6 recommended)
+ * @return          Pointer to the start of the string in buf
+ */
+char* ftoa(char* buf, float val, int decimals)
+{
+    char* p = buf;
+    //uint32_t uval;
+    int32_t ival;
+
+    // Handle negative sign
+    if (val < 0.0f) {
+        *p++ = '-';
+        val = -val;
+    }
+
+    // Separate integer and fractional parts
+    ival = (int32_t)val;                    // integer part
+    float frac = val - (float)ival;         // fractional part
+
+    // Convert integer part (reuse simple int32 logic)
+    if (ival == 0) {
+        *p++ = '0';
+    } else {
+        char* start = p;
+        while (ival > 0) {
+            *p++ = (char)('0' + (ival % 10));
+            ival /= 10;
+        }
+        // Reverse the digits
+        char* end = p - 1;
+        while (start < end) {
+            char tmp = *start;
+            *start++ = *end;
+            *end-- = tmp;
+        }
+    }
+
+    // Add decimal point and fractional digits
+    if (decimals > 0) {
+        *p++ = '.';
+
+        // Multiply fractional part by 10^decimals and round
+        for (int i = 0; i < decimals; i++) {
+            frac *= 10.0f;
+        }
+        uint32_t fpart = (uint32_t)(frac + 0.5f);   // round to nearest
+
+        // Print decimals (with leading zeros if needed)
+        for (int i = decimals - 1; i >= 0; i--) {
+            p[i] = (char)('0' + (fpart % 10));
+            fpart /= 10;
+        }
+        p += decimals;
+    }
+
+    *p = '\0';   // null-terminate
+    return buf;
+}
+
 void PrintParamsJson(IPutChar* term, CanMap* canMap)
 {
    CanSdo* sdo = (CanSdo*)term;
    const Param::Attributes *pAtr;
 
    static bool active = false;
-   static uint32_t idx = 0;
+   static int32_t idx = 0;
    static char comma = ' ';
    static int stage = 0;
 
@@ -25,7 +91,7 @@ void PrintParamsJson(IPutChar* term, CanMap* canMap)
    if (!active)
    {
       active = true;
-      idx = 0;
+      idx = -1;
       comma = ' ';
       stage = 0;
       outLen = 0;
@@ -96,13 +162,16 @@ void PrintParamsJson(IPutChar* term, CanMap* canMap)
                   continue;
                }
 
+               char val_str[16];
+               ftoa(val_str, (float)Param::Get((Param::PARAM_NUM)idx) / 32.0f, 3);
                n += sprintf(outBuf + n,
-                            "%c\r\n   \"%s\": {\"unit\":\"%s\",\"id\":%d,\"value\":%f,",
+                            "%c\r\n   \"%s\": {\"unit\":\"%s\",\"id\":%d,\"value\":%s,",
                             comma,
                             pAtr->name,
                             pAtr->unit,
                             (uint16_t)pAtr->id,
-                            (float)((float)Param::Get((Param::PARAM_NUM)idx) / 32.0f));
+                            val_str);
+                           //(float)((float)Param::Get((Param::PARAM_NUM)idx) / 32.0f));
 
                if (canMap->FindMap((Param::PARAM_NUM)idx, canId, canStart, canLength, canGain, offset, isRx))
                {
@@ -119,13 +188,36 @@ void PrintParamsJson(IPutChar* term, CanMap* canMap)
                if (Param::GetType((Param::PARAM_NUM)idx) == Param::TYPE_PARAM ||
                    Param::GetType((Param::PARAM_NUM)idx) == Param::TYPE_TESTPARAM)
                {
+                  char min_str[16], max_str[16], def_str[16];
+
+                  ftoa(min_str, (float)pAtr->min / 32.0f, 3);   // adjust decimals as needed
+                  ftoa(max_str, (float)pAtr->max / 32.0f, 3);
+                  ftoa(def_str, (float)pAtr->def / 32.0f, 3);
+
+                  sprintf(outBuf + n, "\"minimum\":%s,\"maximum\":%s,\"default\":%s",
+                  min_str, max_str, def_str);
                   n += sprintf(outBuf + n,
-                               "\"isparam\":true,\"minimum\":%f,\"maximum\":%f,\"default\":%f,\"category\":\"%s\",\"i\":%d}",
-                               (float)FP_TOFLOAT(pAtr->min),
-                               (float)FP_TOFLOAT(pAtr->max),
-                               (float)FP_TOFLOAT(pAtr->def),
+                               "\"isparam\":true,\"minimum\":%s,\"maximum\":%s,\"default\":%s,\"category\":\"%s\",\"i\":%d}",
+                               min_str, max_str, def_str,
                                pAtr->category,
                                (uint16_t)idx);
+
+                  /*
+                  int32_t fmin = pAtr->min/32;
+                  int32_t fmax = pAtr->max/32;
+                  int32_t fdef = pAtr->def/32;
+
+                  n += sprintf(outBuf + n,
+                               "\"isparam\":true,\"minimum\":%d%d,\"maximum\":%d%d,\"default\":%d%d,\"category\":\"%s\",\"i\":%d}",
+                               (uint16_t)(fmin >> 16),(uint16_t)fmin,
+                               (uint16_t)(fmin >> 16),(uint16_t)fmax,
+                               (uint16_t)(fmin >> 16),(uint16_t)fdef,
+                               pAtr->category,
+                               (uint16_t)idx);
+                  */
+                  //    (uint16_t)(canLastStatus >> 16),
+                  //    (uint16_t)canLastStatus);
+
                }
                else
                {

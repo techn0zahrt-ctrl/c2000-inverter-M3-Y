@@ -68,7 +68,7 @@ SECTIONS
    .cinit           : > RAMGS12,     PAGE = 1
    .switch          : > RAMGS7,     PAGE = 0
    .reset           : > RESET,     PAGE = 0, TYPE = DSECT /* not used, */
-   .stack           : > RAMM1,     PAGE = 1
+   .stack           : > RAMD1,     PAGE = 1
 
 #if defined(__TI_EABI__)
    .bss             : > RAMLS5 | RAMGS6,    PAGE = 1

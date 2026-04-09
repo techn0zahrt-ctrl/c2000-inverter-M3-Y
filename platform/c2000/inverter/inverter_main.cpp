@@ -281,6 +281,9 @@ void main(void)
             PRINTF("polepairs raw = %d\r\n", (uint16_t)Param::Get(Param::polepairs));
             PRINTF("canspeed raw = %d\r\n", (uint16_t)Param::Get(Param::canspeed));
             PRINTF("nodeid raw = %d\r\n", (uint16_t)Param::Get(Param::nodeid));
+            float myFloat = 123.456f;
+            // Ensure "full" printf support is enabled in project properties
+            PRINTF("The value is: %f\n", (float)myFloat);
             //PRINTF("data[1] hi=0x%x lo=0x%x\n", 
             //    (uint16_t)(canLastStatus >> 16),
             //    (uint16_t)canLastStatus);

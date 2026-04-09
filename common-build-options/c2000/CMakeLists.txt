@@ -73,13 +73,15 @@ target_link_options(
   --float_support=fpu32
   --tmu_support=tmu0
   --vcu_support=vcu2
-  --stack_size=0x100
-  --heap_size=0x800
+  --stack_size=0x800
+  --heap_size=0x1000
   --warn_sections
   --reread_libs
   --diag_wrap=off
   --display_error_number
   --rom_model
+  -m "${CMAKE_PROJECT_NAME}.map"     # Creates <projectname>.map in build dir
+  --mapfile_contents=all             # Most detailed output (sections, symbols, etc.)
   "${LINKER_CMD}")
 
 # Special library to add last
