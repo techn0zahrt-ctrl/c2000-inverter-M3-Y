@@ -141,10 +141,10 @@ void EEPROM::Write32Bits(uint16_t address, uint32_t data)
 
         SPI_transmitByte(DEVICE_TESLAM3_EEPROM_SPI, EEPROM_CMD_WRITE);
         SPI_transmit16Bits(DEVICE_TESLAM3_EEPROM_SPI, address);
-        SPI_transmit16Bits(
-            DEVICE_TESLAM3_EEPROM_SPI, (uint16_t)(data & 0xFFFF));
-        SPI_transmit16Bits(
-            DEVICE_TESLAM3_EEPROM_SPI, (uint16_t)(data >> 16));
+        SPI_transmitByte(DEVICE_TESLAM3_EEPROM_SPI, (uint16_t)(data & 0xFFU));
+        SPI_transmitByte(DEVICE_TESLAM3_EEPROM_SPI, (uint16_t)((data >> 8U) & 0xFFU));
+        SPI_transmitByte(DEVICE_TESLAM3_EEPROM_SPI, (uint16_t)((data >> 16U) & 0xFFU));
+        SPI_transmitByte(DEVICE_TESLAM3_EEPROM_SPI, (uint16_t)((data >> 24U) & 0xFFU));
     }
 
     WaitForWrite();

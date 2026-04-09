@@ -156,7 +156,8 @@ void main(void)
 
     EEPROM::InitSPI();
     // Load CAN map from EEPROM if valid
-    parm_load();
+    //parm_load();
+    int loadResult = parm_load();
 
     Scheduler::Init();
     PRINTF("Pmic driver initialisation: %s\n",

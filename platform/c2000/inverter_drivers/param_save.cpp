@@ -92,15 +92,10 @@ uint32_t parm_save(void)
     crc_reset();
     buf[2U * NUM_PARAMS] = crc_calculate_block(buf, 2U * NUM_PARAMS);
 
-    /* Write to EEPROM, erasing first if the block is not blank */
-    flash_unlock();
-    if (check != 0xFFFFFFFFUL)
-        flash_erase_page(PARAM_FLASH_ADDR);
-
+    /* Write to EEPROM */
     for (i = 0; i < PARAM_WORDS_EEPROM; i++)
-        flash_program_word(PARAM_FLASH_ADDR + i * 4U, buf[i]);
+        c2000::EEPROM::Write32Bits(PARAM_FLASH_ADDR + i * 4U, buf[i]);
 
-    flash_lock();
     return buf[2U * NUM_PARAMS];
 }
 
