@@ -26,13 +26,13 @@
 namespace c2000 {
 
 /**
- * \brief STGAP1AS gate driver register set up sequence
+ * \brief STGAP1AS gate driver register set up sequence — RDU (rear drive unit)
  *
- *  The register set up sequence for each of 6 chips on the Tesla Model 3
- * Inverter. Settings are applied to all chips or high/low-side drivers as
- * required
+ * CFG4 differs between odd (low-side) and even (high-side) chips: low-side
+ * chips have a negative supply (VLON_TH_NEG_3V) while high-side chips are
+ * referenced to ground (VLON_TH_DISABLED).
  */
-const GateDriver::Register GateDriver::GateDriverRegisterSetup[] = {
+const GateDriver::Register GateDriver::GateDriverRegisterSetupRDU[] = {
     { STGAP1AS_REG_CFG1,
       STGAP1AS_REG_CFG1_CRC_SPI | STGAP1AS_REG_CFG1_SD_FLAG |
           STGAP1AS_REG_CFG1_DT_800NS | STGAP1AS_REG_CFG1_IN_FILTER_500NS,
@@ -66,12 +66,54 @@ const GateDriver::Register GateDriver::GateDriverRegisterSetup[] = {
           STGAP1AS_REG_DIAG1CFG_DESAT_SENSE | STGAP1AS_REG_DIAG1CFG_TSD,
       All,
       STGAP1AS_REG_DIAG1CFG_MASK },
-    { STGAP1AS_REG_DIAG2CFG, 0, All, STGAP1AS_REG_DIAG2CFG }
+    { STGAP1AS_REG_DIAG2CFG, 0, All, STGAP1AS_REG_DIAG2CFG_MASK }
 };
 
-const uint16_t GateDriver::RegisterSetupSize =
-    sizeof(GateDriver::GateDriverRegisterSetup) /
-    sizeof(GateDriverRegisterSetup[0]);
+const uint16_t GateDriver::RegisterSetupSizeRDU =
+    sizeof(GateDriver::GateDriverRegisterSetupRDU) /
+    sizeof(GateDriverRegisterSetupRDU[0]);
+
+/**
+ * \brief STGAP1AS gate driver register set up sequence — FDU (front drive unit)
+ *
+ * All chips use the same CFG4 value: both VH and VL supplies are present on
+ * all phases (VLON_TH_NEG_3V and VHON_TH_12V for every chip).
+ */
+const GateDriver::Register GateDriver::GateDriverRegisterSetupFDU[] = {
+    { STGAP1AS_REG_CFG1,
+      STGAP1AS_REG_CFG1_CRC_SPI | STGAP1AS_REG_CFG1_SD_FLAG |
+          STGAP1AS_REG_CFG1_DT_800NS | STGAP1AS_REG_CFG1_IN_FILTER_500NS,
+      All,
+      STGAP1AS_REG_CFG1_MASK },
+    { STGAP1AS_REG_CFG2,
+      STGAP1AS_REG_CFG2_DESAT_CUR_500UA | STGAP1AS_REG_CFG2_DESAT_TH_8V,
+      All,
+      STGAP1AS_REG_CFG2_MASK },
+    { STGAP1AS_REG_CFG3,
+      STGAP1AS_REG_CFG3_2LTO_TH_10V | STGAP1AS_REG_CFG3_2LTO_TIME_DISABLED,
+      All,
+      STGAP1AS_REG_CFG3_MASK },
+    { STGAP1AS_REG_CFG4,
+      STGAP1AS_REG_CFG4_UVLO_LATCHED | STGAP1AS_REG_CFG4_VLON_TH_NEG_3V |
+          STGAP1AS_REG_CFG4_VHON_TH_12V,
+      All,
+      STGAP1AS_REG_CFG4_MASK },
+    { STGAP1AS_REG_CFG5,
+      STGAP1AS_REG_CFG5_2LTO_EN | STGAP1AS_REG_CFG5_DESAT_EN,
+      All,
+      STGAP1AS_REG_CFG5_MASK },
+    { STGAP1AS_REG_DIAG1CFG,
+      STGAP1AS_REG_DIAG1CFG_UVLOD_OVLOD | STGAP1AS_REG_DIAG1CFG_UVLOH_UVLOL |
+          STGAP1AS_REG_DIAG1CFG_OVLOH_OVLOL |
+          STGAP1AS_REG_DIAG1CFG_DESAT_SENSE | STGAP1AS_REG_DIAG1CFG_TSD,
+      All,
+      STGAP1AS_REG_DIAG1CFG_MASK },
+    { STGAP1AS_REG_DIAG2CFG, 0, All, STGAP1AS_REG_DIAG2CFG_MASK }
+};
+
+const uint16_t GateDriver::RegisterSetupSizeFDU =
+    sizeof(GateDriver::GateDriverRegisterSetupFDU) /
+    sizeof(GateDriverRegisterSetupFDU[0]);
 
 // Delays from STGAP1AS datasheet Table 6. DC operation electrical
 // characteristics - SPI Section
@@ -115,20 +157,18 @@ GateDriverInterface GateDriver::sm_interface;
 bool GateDriver::Init()
 {
     sm_interface.Init();
-    SetupGateDrivers();
-    // CFG registers can only be read back during CONFIG mode (before
-    // STOP_CONFIG).  Verify first, then close configuration.
-    bool verified = VerifyGateDriverConfig();
-    SendCommand(STGAP1AS_CMD_STOP_CONFIG);
-    DEVICE_DELAY_US(StopConfigDelay);
-    if (verified)
+
+    for (int attempt = 0; attempt < 3; attempt++)
     {
-        return !IsFaulty();
+        SetupGateDrivers();
+        bool verified = VerifyGateDriverConfig();
+        SendCommand(STGAP1AS_CMD_STOP_CONFIG);
+        DEVICE_DELAY_US(StopConfigDelay);
+        if (verified)
+            return !IsFaulty();
+        DEVICE_DELAY_US(100000); // 100ms between retries
     }
-    else
-    {
-        return false;
-    }
+    return false;
 }
 
 /**
@@ -186,9 +226,17 @@ void GateDriver::SetupGateDrivers()
     SendCommand(STGAP1AS_CMD_START_CONFIG);
     DEVICE_DELAY_US(StartConfigDelay);
 
-    for (uint8_t i = 0; i < RegisterSetupSize; i++)
+#if CONTROL == CTRL_SINE
+    const Register* setup = GateDriverRegisterSetupFDU;
+    uint16_t        size  = RegisterSetupSizeFDU;
+#else
+    const Register* setup = GateDriverRegisterSetupRDU;
+    uint16_t        size  = RegisterSetupSizeRDU;
+#endif
+
+    for (uint8_t i = 0; i < size; i++)
     {
-        WriteRegister(GateDriverRegisterSetup[i]);
+        WriteRegister(setup[i]);
         DEVICE_DELAY_US(OtherCommandDelay);
     }
     // STOP_CONFIG is sent by Init() after VerifyGateDriverConfig(), because
@@ -202,11 +250,19 @@ void GateDriver::SetupGateDrivers()
  */
 bool GateDriver::VerifyGateDriverConfig()
 {
+#if CONTROL == CTRL_SINE
+    const Register* setup = GateDriverRegisterSetupFDU;
+    uint16_t        size  = RegisterSetupSizeFDU;
+#else
+    const Register* setup = GateDriverRegisterSetupRDU;
+    uint16_t        size  = RegisterSetupSizeRDU;
+#endif
+
     uint16_t regValues[NumDriverChips];
     bool     result = true;
-    for (uint8_t i = 0; i < RegisterSetupSize; i++)
+    for (uint8_t i = 0; i < size; i++)
     {
-        const Register& reg = GateDriverRegisterSetup[i];
+        const Register& reg = setup[i];
         ReadRegister(reg.reg, regValues);
         DEVICE_DELAY_US(RemoteRegReadDelay);
 

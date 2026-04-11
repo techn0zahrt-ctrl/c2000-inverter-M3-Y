@@ -81,17 +81,6 @@ void main(void)
     //
     Device_initGPIO();
 
-    //
-    // Initialize PIE and clear PIE registers. Disables CPU interrupts.
-    //
-    Interrupt_initModule();
-
-    //
-    // Initialize the PIE vector table with pointers to the shell Interrupt
-    // Service Routines (ISR).
-    //
-    Interrupt_initVectorTable();
-    //
     // Set up GPIO pinmux for EPWM
     GPIO_setPinConfig(GPIO_0_EPWM1A);
     GPIO_setPinConfig(GPIO_8_EPWM5A);
@@ -132,51 +121,59 @@ void main(void)
     GPIO_setDirectionMode(heartbeatLedPin2, GPIO_DIR_MODE_OUT);
     GPIO_writePin(heartbeatLedPin2, 0);
 
+    //
+    // Initialize PIE and clear PIE registers. Disables CPU interrupts.
+    //
+    Interrupt_initModule();
+
+    //
+    // Initialize the PIE vector table with pointers to the shell Interrupt
+    // Service Routines (ISR).
+    //
+    Interrupt_initVectorTable();
+    //
+
     //*/
     // Turn on the gate drive PSU
     //
     GPIO_writePin(DEVICE_GPIO_PIN_GATE_PSU_ENABLE, 0);
     GPIO_setPadConfig(DEVICE_GPIO_PIN_GATE_PSU_ENABLE, GPIO_PIN_TYPE_STD);
     GPIO_setDirectionMode(DEVICE_GPIO_PIN_GATE_PSU_ENABLE, GPIO_DIR_MODE_OUT);
-    PRINTF("Gate Drive PSU ON\n");
+    printf("Gate Drive PSU ON\n");
 
-    // Wait for gate driver isolated-side supplies (VH/VL) to ramp up and
-    // stabilise before initialising the STGAP1AS chips.  Without this delay
-    // the remote (isolated-side) registers are unreadable and Init() fails.
-    // The gatedrivertest reference uses 1 second; 500 ms is sufficient in
-    // practice but can be tuned to match the PSU soft-start time.
-    DEVICE_DELAY_US(500000);
-
-    //
-    // Set up the gate drivers for PWM operation
-    //
-    PRINTF("Gate Drive initialisation: ");
-    if (GateDriver::Init())
-    {
-        PRINTF("OK\n");
-        GateDriver::Enable();
-    }
-    else
-    {
-        PRINTF("Fail\n");
-    }
-
-    EEPROM::InitSPI();
-    // Load CAN map from EEPROM if valid
-    //parm_load();
-    int loadResult = parm_load();
+    DEVICE_DELAY_US(50000);
 
     Scheduler::Init();
-    PRINTF("Pmic driver initialisation: %s\n",
+    printf("Pmic driver initialisation: %s\n",
         PowerWatchdog::Init() == PowerWatchdog::OK ? "OK" : "Fail");
 
     // add a task to strobe the power watchdog every 100ms
     Scheduler::AddTask(taskStrobePowerWatchdog, 100);
+
+    //
+    // Set up the gate drivers for PWM operation
+    //
+    printf("Gate Drive initialisation: ");
+    if (GateDriver::Init())
+    {
+        printf("OK\n");
+        GateDriver::Enable();
+    }
+    else
+    {
+        printf("Fail\n");
+    }
+
     // Set up the error message log and set operating parameters to default
     ErrorMessage::ResetAll();
     // TODO: Figure out where the timer tick comes from to increment this
     ErrorMessage::SetTime(1);
     Param::LoadDefaults();
+
+    // Initialize EEPROM
+    EEPROM::InitSPI();
+    // Load CAN map from EEPROM if valid
+    int loadResult = parm_load();
 
     // Configure the PWM generation
     PwmGeneration::SetCurrentOffset(2048, 2048);
@@ -207,19 +204,16 @@ void main(void)
     // Initialize CAN at 500kbps
     can = new C2000Can(CANA_BASE);
     can->SetBaudrate(CanHardware::Baud500);
-    canMap = new CanMap(can);
-    canSdo = new CanSdo(can, canMap);
-    canSdo->SetPrintCallback(onPrintRequest);
-
-    EEPROM::InitSPI();
-    // Load CAN map from EEPROM if valid
-    parm_load();
 
     //
     // Enable Global Interrupt (INTM) and realtime interrupt (DBGM)
     //
     EINT;
     ERTM;
+
+    canMap = new CanMap(can);
+    canSdo = new CanSdo(can, canMap);
+    canSdo->SetPrintCallback(onPrintRequest);
 
     //
     // Turn on the global PWM buffer enable
@@ -286,9 +280,6 @@ void main(void)
             PRINTF("GD2: S1=0x%x S2=0x%x S3=0x%x\n", gd_status1[2], gd_status2[2], gd_status3[2]);
             int32_t currentLoad = PwmGeneration::GetCpuLoad();
             PRINTF("PWM cycles: %d\n", currentLoad - lastLoad);
-            PRINTF("polepairs raw = %d\r\n", (uint16_t)Param::Get(Param::polepairs));
-            PRINTF("canspeed raw = %d\r\n", (uint16_t)Param::Get(Param::canspeed));
-            PRINTF("nodeid raw = %d\r\n", (uint16_t)Param::Get(Param::nodeid));
             //float myFloat = 123.456f;
             // Ensure "full" printf support is enabled in project properties
             //PRINTF("The value is: %f\n", (float)myFloat);
@@ -299,6 +290,9 @@ void main(void)
             // Blink pattern: 2x green, 2x red, Repeat
             // States 0,1 = green on/off, States 2,3 = green on/off,
             // States 4,5 = red on/off, States 6,7 = red on/off
+        }
+        if (loopCount % 25 == 0)
+        {
             switch (blinkState)
             {
                 case 0: GPIO_writePin(heartbeatLedPin, 0);  GPIO_writePin(heartbeatLedPin2, 1); break;

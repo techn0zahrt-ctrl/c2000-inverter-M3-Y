@@ -53,8 +53,10 @@ private:
 
 private:
     static const uint16_t NumDriverChips = 6;
-    static const Register GateDriverRegisterSetup[];
-    static const uint16_t RegisterSetupSize;
+    static const Register GateDriverRegisterSetupRDU[];
+    static const Register GateDriverRegisterSetupFDU[];
+    static const uint16_t RegisterSetupSizeRDU;
+    static const uint16_t RegisterSetupSizeFDU;
     static const Register NullGateDriverRegister;
 
 private:
