@@ -17,15 +17,22 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "focpwmgeneration.h"
 #include "simulatorcurrent.h"
 #include "simulatorencoder.h"
 #include "simulatorpwmdriver.h"
 
-// Global declaration of our PWM generation class - we only support Field
-// Oriented Control at this point
+#if CONTROL == CTRL_FOC
+#include "focpwmgeneration.h"
 typedef FocPwmGeneration<
     simulator::Current,
     simulator::Encoder,
     simulator::PwmDriver>
     PwmGeneration;
+#elif CONTROL == CTRL_SINE
+#include "sinepwmgeneration.h"
+typedef SinePwmGeneration<
+    simulator::Current,
+    simulator::Encoder,
+    simulator::PwmDriver>
+    PwmGeneration;
+#endif

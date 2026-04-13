@@ -17,6 +17,14 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "params.h"
+
+void Param::Change([[maybe_unused]] Param::PARAM_NUM paramNum)
+{
+}
+
+#if CONTROL == CTRL_FOC
+
 #include "errormessage.h"
 #include "focpwmgeneration.h"
 #include "matcherhelper.h"
@@ -36,10 +44,6 @@ using ::testing::Le;
 using ::testing::Ne;
 using ::testing::Return;
 using ::testing::Test;
-
-void Param::Change([[maybe_unused]] Param::PARAM_NUM paramNum)
-{
-}
 
 static const uint16_t DefaultPwmFrequency = 8789; // Hz
 
@@ -520,3 +524,4 @@ TEST_F(TestFocPwmGeneration, CurrentOffsetAveraging)
 
     EXPECT_EQ(ErrorMessage::GetLastError(), ERROR_NONE);
 }
+#endif // CONTROL == CTRL_FOC

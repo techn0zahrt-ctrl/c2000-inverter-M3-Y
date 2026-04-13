@@ -34,37 +34,67 @@ class SinePwmGeneration : public PwmGenerationBase<
                               CurrentT,
                               PwmDriverT>
 {
-    using BaseT = PwmGenerationBase<
+    typedef PwmGenerationBase<
+        SinePwmGeneration<CurrentT, EncoderT, PwmDriverT>,
+        CurrentT,
+        PwmDriverT> BaseT;
+
+    // We need to allow PwmGenerationBase to call PwmInit
+    friend class PwmGenerationBase<
         SinePwmGeneration<CurrentT, EncoderT, PwmDriverT>,
         CurrentT,
         PwmDriverT>;
 
-    // We need to allow PwmGenerationBase to call PwmInit
-    friend BaseT;
+    // Bring inherited base class members into scope for unqualified access in
+    // method bodies. Required by C++03 (TI compiler) where qualified access via
+    // a dependent class name is not supported, and by C++11 strict two-phase
+    // lookup which does not search dependent base classes for unqualified names.
+    using BaseT::opmode;
+    using BaseT::frq;
+    using BaseT::angle;
+    using BaseT::shiftForTimer;
+    using BaseT::ampnom;
+    using BaseT::fslip;
+    using BaseT::slipIncr;
+    using BaseT::pwmfrq;
+    using BaseT::pwmdigits;
+    using BaseT::polePairRatio;
+    using BaseT::ilofs;
+    using BaseT::Charge;
+    using BaseT::GetCurrent;
+    using BaseT::FrqToAngle;
+    using BaseT::DigitToDegree;
+public:
+    using BaseT::SetCurrentOffset;
+
+    static s32fp GetDebugAmpNomLimited() { return s_debugAmpNomLimited; }
+    static uint32_t GetDebugAmp() { return s_debugAmp; }
 
 public:
     static void Run()
     {
-        if (BaseT::opmode == Modes::MANUAL || BaseT::opmode == Modes::RUN ||
-            BaseT::opmode == Modes::SINE)
+        if (opmode == MANUAL || opmode == RUN ||
+            opmode == SINE)
         {
             int32_t dir = Param::GetInt(Param::dir);
 
             EncoderT::UpdateRotorAngle(dir);
             s32fp ampNomLimited = LimitCurrent();
 
-            if (BaseT::opmode == Modes::SINE)
+            if (opmode == SINE)
                 CalcNextAngleConstant(dir);
             else
                 CalcNextAngleAsync(dir);
 
-            uint32_t amp = MotorVoltage::GetAmpPerc(BaseT::frq, ampNomLimited);
+            uint32_t amp = MotorVoltage::GetAmpPerc(frq, ampNomLimited);
+            s_debugAmpNomLimited = ampNomLimited;
+            s_debugAmp = amp;
 
             SineCore::SetAmp(amp);
             Param::SetInt(Param::amp, amp);
-            Param::SetFixed(Param::fstat, BaseT::frq);
-            Param::SetFixed(Param::angle, BaseT::DigitToDegree(BaseT::angle));
-            SineCore::Calc(BaseT::angle);
+            Param::SetFixed(Param::fstat, frq);
+            Param::SetFixed(Param::angle, DigitToDegree(angle));
+            SineCore::Calc(angle);
 
             /* Shut down PWM on zero voltage request */
             if (0 == amp || 0 == dir)
@@ -78,17 +108,17 @@ public:
 
             /* Match to PWM resolution */
             PwmDriverT::SetPhasePwm(
-                SineCore::DutyCycles[0] >> BaseT::shiftForTimer,
-                SineCore::DutyCycles[1] >> BaseT::shiftForTimer,
-                SineCore::DutyCycles[2] >> BaseT::shiftForTimer);
+                SineCore::DutyCycles[0] >> shiftForTimer,
+                SineCore::DutyCycles[1] >> shiftForTimer,
+                SineCore::DutyCycles[2] >> shiftForTimer);
         }
-        else if (BaseT::opmode == Modes::BOOST || BaseT::opmode == Modes::BUCK)
+        else if (opmode == BOOST || opmode == BUCK)
         {
-            BaseT::Charge();
+            Charge();
         }
-        else if (BaseT::opmode == Modes::ACHEAT)
+        else if (opmode == ACHEAT)
         {
-            PwmDriverT::AcHeat(BaseT::ampnom);
+            PwmDriverT::AcHeat(ampnom);
         }
     }
 
@@ -154,14 +184,14 @@ public:
 
         ampnomLocal = MIN(ampnomLocal, 100.0f);
         // anticipate sudden changes by filtering
-        BaseT::ampnom =
-            IIRFILTER(BaseT::ampnom, FP_FROMFLT(ampnomLocal), filterConst);
-        BaseT::fslip =
-            IIRFILTER(BaseT::fslip, FP_FROMFLT(fslipspnt), filterConst);
-        Param::Set(Param::ampnom, BaseT::ampnom);
-        Param::Set(Param::fslipspnt, BaseT::fslip);
+        ampnom =
+            IIRFILTER(ampnom, FP_FROMFLT(ampnomLocal), filterConst);
+        fslip =
+            IIRFILTER(fslip, FP_FROMFLT(fslipspnt), filterConst);
+        Param::Set(Param::ampnom, ampnom);
+        Param::Set(Param::fslipspnt, fslip);
 
-        BaseT::slipIncr = BaseT::FrqToAngle(BaseT::fslip);
+        slipIncr = FrqToAngle(fslip);
     }
 
 private:
@@ -179,17 +209,16 @@ private:
 protected:
     static void PwmInit()
     {
-        BaseT::SetCurrentOffset(CurrentT::Phase1(), CurrentT::Phase2());
-        BaseT::pwmfrq = PwmDriverT::TimerSetup(
+        pwmfrq = PwmDriverT::TimerSetup(
             Param::GetInt(Param::deadtime),
             Param::GetInt(Param::pwmpol),
-            BaseT::pwmdigits);
-        BaseT::slipIncr = BaseT::FrqToAngle(BaseT::fslip);
-        EncoderT::SetPwmFrequency(BaseT::pwmfrq);
+            pwmdigits);
+        slipIncr = FrqToAngle(fslip);
+        EncoderT::SetPwmFrequency(pwmfrq);
 
         PwmDriverT::DriverInit();
 
-        if (BaseT::opmode == Modes::ACHEAT)
+        if (opmode == ACHEAT)
             PwmDriverT::AcHeatTimerSetup();
     }
 
@@ -201,10 +230,10 @@ private:
         static int32_t  sign = 1;
         static EdgeType lastEdge[2] = { PosEdge, PosEdge };
 
-        s32fp il1 = BaseT::GetCurrent(
-            CurrentT::Phase1(), BaseT::ilofs[0], Param::Get(Param::il1gain));
-        s32fp il2 = BaseT::GetCurrent(
-            CurrentT::Phase2(), BaseT::ilofs[1], Param::Get(Param::il2gain));
+        s32fp il1 = GetCurrent(
+            CurrentT::Phase1(), ilofs[0], Param::Get(Param::il1gain));
+        s32fp il2 = GetCurrent(
+            CurrentT::Phase2(), ilofs[1], Param::Get(Param::il2gain));
         s32fp    rms;
         s32fp    il1PrevRms = Param::Get(Param::il1rms);
         s32fp    il2PrevRms = Param::Get(Param::il2rms);
@@ -215,14 +244,14 @@ private:
         {
             Param::SetFixed(Param::il1rms, rms);
 
-            if (BaseT::opmode != Modes::BOOST || BaseT::opmode != Modes::BUCK)
+            if (opmode != BOOST || opmode != BUCK)
             {
                 // rough approximation as we do not take power factor into
                 // account
                 s32fp idc = (SineCore::GetAmp() * rms) / SineCore::MAXAMP;
                 idc = FP_DIV(
                     idc, FP_FROMFLT(1.2247)); // divide by sqrt(3)/sqrt(2)
-                idc *= BaseT::fslip < 0 ? -1 : 1;
+                idc *= fslip < 0 ? -1 : 1;
                 Param::SetFixed(Param::idc, idc);
             }
         }
@@ -246,23 +275,23 @@ private:
         static uint16_t slipAngle = 0;
         uint16_t        rotorAngle = EncoderT::GetRotorAngle();
 
-        BaseT::frq =
-            BaseT::polePairRatio * EncoderT::GetRotorFrequency() + BaseT::fslip;
-        slipAngle += dir * BaseT::slipIncr;
+        frq =
+            polePairRatio * EncoderT::GetRotorFrequency() + fslip;
+        slipAngle += dir * slipIncr;
 
-        if (BaseT::frq < 0)
-            BaseT::frq = 0;
+        if (frq < 0)
+            frq = 0;
 
-        BaseT::angle = BaseT::polePairRatio * rotorAngle + slipAngle;
+        angle = polePairRatio * rotorAngle + slipAngle;
     }
 
     static void CalcNextAngleConstant(int32_t dir)
     {
-        BaseT::frq = BaseT::fslip;
-        BaseT::angle += dir * BaseT::slipIncr;
+        frq = fslip;
+        angle += dir * slipIncr;
 
-        if (BaseT::frq < 0)
-            BaseT::frq = 0;
+        if (frq < 0)
+            frq = 0;
     }
 
     static s32fp GetIlMax(s32fp il1, s32fp il2)
@@ -282,19 +311,19 @@ private:
 
     static s32fp LimitCurrent()
     {
-        static s32fp curLimSpntFiltered = 0, slipFiltered = 0;
+        static s32fp curLimSpntFiltered = FP_FROMINT(100), slipFiltered = 0;
         s32fp        slipmin = Param::Get(Param::fslipmin);
         s32fp        imax = Param::Get(Param::iacmax);
         s32fp        ilMax = ProcessCurrents();
 
         // setting of 0 disables current limiting
         if (imax == 0)
-            return BaseT::ampnom;
+            return ampnom;
 
         s32fp a = imax / 20; // Start acting at 80% of imax
         s32fp imargin = imax - ilMax;
         s32fp curLimSpnt = FP_DIV(100 * imargin, a);
-        s32fp slipSpnt = FP_DIV(FP_MUL(BaseT::fslip, imargin), a);
+        s32fp slipSpnt = FP_DIV(FP_MUL(fslip, imargin), a);
         slipSpnt = MAX(slipmin, slipSpnt);
         curLimSpnt = MAX(FP_FROMINT(40), curLimSpnt); // Never go below 40%
         int32_t filter = Param::GetInt(
@@ -303,11 +332,11 @@ private:
         curLimSpntFiltered = IIRFILTER(curLimSpntFiltered, curLimSpnt, filter);
         slipFiltered = IIRFILTER(slipFiltered, slipSpnt, 1);
 
-        s32fp ampNomLimited = MIN(BaseT::ampnom, curLimSpntFiltered);
-        slipSpnt = MIN(BaseT::fslip, slipFiltered);
-        BaseT::slipIncr = BaseT::FrqToAngle(slipSpnt);
+        s32fp ampNomLimited = MIN(ampnom, curLimSpntFiltered);
+        slipSpnt = MIN(fslip, slipFiltered);
+        slipIncr = FrqToAngle(slipSpnt);
 
-        if (curLimSpnt < BaseT::ampnom)
+        if (curLimSpnt < ampnom)
             ErrorMessage::Post(ERR_CURRENTLIMIT);
 
         return ampNomLimited;
@@ -322,7 +351,7 @@ private:
         s32fp     prevRms)
     {
         const s32fp oneOverSqrt2 = FP_FROMFLT(0.707106781187);
-        int32_t     minSamples = BaseT::pwmfrq / (4 * FP_TOINT(BaseT::frq));
+        int32_t     minSamples = pwmfrq / (4 * FP_TOINT(frq));
         EdgeType    edgeType = NoEdge;
 
         minSamples = MAX(10, minSamples);
@@ -351,6 +380,15 @@ private:
 
         return edgeType;
     }
+
+    static s32fp s_debugAmpNomLimited;
+    static uint32_t s_debugAmp;
 };
+
+template <typename CurrentT, typename EncoderT, typename PwmDriverT>
+s32fp SinePwmGeneration<CurrentT, EncoderT, PwmDriverT>::s_debugAmpNomLimited = 0;
+
+template <typename CurrentT, typename EncoderT, typename PwmDriverT>
+uint32_t SinePwmGeneration<CurrentT, EncoderT, PwmDriverT>::s_debugAmp = 0;
 
 #endif // SINEPWMGENERATION_H

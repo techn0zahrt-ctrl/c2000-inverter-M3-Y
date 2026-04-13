@@ -38,6 +38,8 @@ public:
     static uint16_t PhaseBCurrent();
     static uint16_t ResolverSine();
     static uint16_t ResolverCosine();
+    static uint16_t UdcVoltage();
+    static uint16_t HvilCurrent();
 
 private:
     static void InitAdcChannel(uint32_t base);

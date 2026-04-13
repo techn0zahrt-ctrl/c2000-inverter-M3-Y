@@ -24,7 +24,7 @@
    2. Temporary parameters (id = 0)
    3. Display values
  */
-//Next param id (increase when adding new parameter!): 169
+//Next param id (increase when adding new parameter!): 171
 //Next value Id: 2049
 /*              category     name         unit       min     max     default id */
 
@@ -65,7 +65,7 @@
     PARAM_ENTRY(CAT_INVERTER,ocurlim,     "A",       -65536L, 65536L,100,    22  ) \
     PARAM_ENTRY(CAT_INVERTER,il1gain,     "dig/A",   -100,   100,    4.7,    27  ) \
     PARAM_ENTRY(CAT_INVERTER,il2gain,     "dig/A",   -100,   100,    4.7,    28  ) \
-    PARAM_ENTRY(CAT_INVERTER,udcgain,     "dig/V",   0,      4095L,  6.175,  29  ) \
+    PARAM_ENTRY(CAT_INVERTER,udcgain,     "dig/V",   0,      4095L,  8.5625,  29  ) \
     PARAM_ENTRY(CAT_INVERTER,udcofs,      "dig",     0,      4095L,  0,      77  ) \
     PARAM_ENTRY(CAT_INVERTER,udclim,      "V",       0,      1000,   540,    48  ) \
     PARAM_ENTRY(CAT_INVERTER,snshs,       SNS_HS,    0,      7,      0,      45  )
@@ -222,8 +222,8 @@
     CHARGER_PARAMETERS \
     OILPUMP_PARAMETERS \
     AUTOMATION_CONTACT_PWM_COMM_PARAMETERS \
-    PARAM_ENTRY(CAT_TEST,    fslipspnt,   "Hz",      -100,   1000,   0,      0   ) \
-    PARAM_ENTRY(CAT_TEST,    ampnom,      "%",       0,      100,    0,      0   ) \
+    PARAM_ENTRY(CAT_TEST,    fslipspnt,   "Hz",      -100,   1000,   0,      151 ) \
+    PARAM_ENTRY(CAT_TEST,    ampnom,      "%",       0,      100,    0,      152 ) \
     VALUE_BLOCK1 \
     VALUES_SINE \
     VALUE_BLOCK2
@@ -242,8 +242,8 @@
     CHARGER_PARAMETERS \
     OILPUMP_PARAMETERS \
     AUTOMATION_CONTACT_PWM_COMM_PARAMETERS \
-    PARAM_ENTRY(CAT_TEST,    manualiq,    "A",       -400,   400,    0,      0  ) \
-    PARAM_ENTRY(CAT_TEST,    manualid,    "A",       -400,   400,    0,      0  ) \
+    PARAM_ENTRY(CAT_TEST,    manualiq,    "A",       -400,   400,    0,      169 ) \
+    PARAM_ENTRY(CAT_TEST,    manualid,    "A",       -400,   400,    0,      170 ) \
     VALUE_BLOCK1 \
     VALUES_FOC \
     VALUE_BLOCK2 \

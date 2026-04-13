@@ -20,7 +20,9 @@
 #include "device.h"
 #include "driverlib.h"
 #include "errormessage.h"
+#if CONTROL == CTRL_FOC
 #include "focpwmgeneration.h"
+#endif
 #include "pmicdriver.h"
 #include "c2000/current.h"
 #include "c2000/encoder.h"
@@ -38,6 +40,10 @@
 #include "sdocommands.h"
 #include "param_save.h"
 #include "json_print.h"
+#include "fu.h"
+#include "sine_core.h"
+
+extern char* ftoa(char* buf, float val, int decimals);
 //#include <inttypes.h>
 
 #define PRINTF(...) do { DINT; printf(__VA_ARGS__); EINT; } while(0)
@@ -53,7 +59,17 @@ volatile uint32_t testdata = 0;
 
 void Param::Change(Param::PARAM_NUM paramNum)
 {
-    (void)paramNum;
+    switch (paramNum)
+    {
+        case Param::ampnom:
+            PwmGeneration::SetAmpnom(Param::Get(Param::ampnom));
+            break;
+        case Param::fslipspnt:
+            PwmGeneration::SetFslip(Param::Get(Param::fslipspnt));
+            break;
+        default:
+            break;
+    }
 }
 
 typedef TeslaM3PowerWatchdog<PmicSpiDriver> PowerWatchdog;
@@ -185,21 +201,21 @@ void main(void)
     // Ensure the system thinks we should be going forwards
     Param::SetInt(Param::dir, 1);
 
+    // Override the default deadtime as the C2000 uses values in nS rather
+    // than a coded STM32 value
+    Param::SetInt(Param::deadtime, 875);
+
+#if CONTROL == CTRL_FOC
     // initialise the controller gains from the default parameters
     PwmGeneration::SetControllerGains(
         Param::GetInt(Param::curkp),
         Param::GetInt(Param::curki),
         Param::GetInt(Param::fwkp));
 
-    // Override the default deadtime as the C2000 uses values in nS rather
-    // than a coded STM32 value
-    Param::SetInt(Param::deadtime, 875);
-
     // Put in a bit of Q current to get the inverter to do something
     Param::Set(Param::manualiq, FP_FROMFLT(0.6));
+#endif
 
-    // Go for manual mode
-    PwmGeneration::SetOpmode(MANUAL);
 //*/
     // Initialize CAN at 500kbps
     can = new C2000Can(CANA_BASE);
@@ -210,6 +226,24 @@ void main(void)
     //
     EINT;
     ERTM;
+
+    // Let PWM ISR fire a few times so ADC readings are valid
+    DEVICE_DELAY_US(1000);
+    // Go for manual mode
+    MotorVoltage::SetMaxAmp(SineCore::MAXAMP);
+    MotorVoltage::SetBoost(Param::GetInt(Param::boost));
+    MotorVoltage::SetWeakeningFrq(Param::GetFloat(Param::fweakstrt));
+    PwmGeneration::SetOpmode(MANUAL);
+    Param::SetEnum(Param::opmode, MANUAL);
+
+    // Wait for PWM ISR to fire at least once so ADC readings are valid
+    while (PwmGeneration::GetCpuLoad() == 0)
+        DEVICE_DELAY_US(100);
+
+    uint16_t phaseA = MotorAnalogCapture::PhaseACurrent();
+    uint16_t phaseB = MotorAnalogCapture::PhaseBCurrent();
+    PwmGeneration::SetCurrentOffset(phaseA, phaseB);
+    PRINTF("Current offsets: PhaseA=%d PhaseB=%d\n", phaseA, phaseB);
 
     canMap = new CanMap(can);
     canSdo = new CanSdo(can, canMap);
@@ -255,6 +289,10 @@ void main(void)
 
         canMap->SendAll();
 
+        // Feed params into PWM generation for manual control
+        PwmGeneration::SetAmpnom(Param::Get(Param::ampnom));
+        PwmGeneration::SetFslip(Param::Get(Param::fslipspnt));
+
         DEVICE_DELAY_US(5000);
 
         loopCount++;
@@ -266,11 +304,9 @@ void main(void)
             //can->Send(0x123, testData, 8);
             PRINTF("Test data: %d, 0x%x\n", (uint16_t)testdata, (uint16_t)testdata);
 
-            PRINTF("PhaseA Current = %d, PhaseB Current = %d, Resolver Sine = %u, Resolver Cosine = %u\n",
+            PRINTF("PhaseA Current = %d, PhaseB Current = %d\n",
                 Param::Get(Param::il1),
-                Param::Get(Param::il2),
-                MotorAnalogCapture::ResolverSine(),
-                MotorAnalogCapture::ResolverCosine());
+                Param::Get(Param::il2));
 
             PRINTF("Gate Drive: %s\n", GateDriver::IsFaulty() ? "FAULT" : "OK");
             uint16_t gd_status1[6], gd_status2[6], gd_status3[6];
@@ -280,6 +316,27 @@ void main(void)
             PRINTF("GD2: S1=0x%x S2=0x%x S3=0x%x\n", gd_status1[2], gd_status2[2], gd_status3[2]);
             int32_t currentLoad = PwmGeneration::GetCpuLoad();
             PRINTF("PWM cycles: %d\n", currentLoad - lastLoad);
+
+            MotorVoltage::SetBoost(Param::GetInt(Param::boost));
+            MotorVoltage::SetWeakeningFrq(Param::GetFloat(Param::fweakstrt));
+            float udc = (float)MotorAnalogCapture::UdcVoltage() / Param::GetFloat(Param::udcgain);
+            Param::SetFloat(Param::udc, udc);
+            char udcStr[16];
+            PRINTF("UDC udc=%s\n", ftoa(udcStr, udc, 1));
+            PRINTF("ampNomLimited=%d amp=%u ampnom=%d fstat=%d\n",
+                (int16_t)PwmGeneration::GetDebugAmpNomLimited(),
+                (uint16_t)PwmGeneration::GetDebugAmp(),
+                (int16_t)Param::Get(Param::ampnom),
+                (int16_t)Param::Get(Param::fstat));
+            PRINTF("Phase A raw=%d Phase B raw=%d\n",
+                MotorAnalogCapture::PhaseACurrent(),
+                MotorAnalogCapture::PhaseBCurrent());
+            PRINTF("Resolver Sine raw=%d Cosine raw=%d\n",
+                MotorAnalogCapture::ResolverSine(),
+                MotorAnalogCapture::ResolverCosine());
+            char hvilStr[16];
+            PRINTF("HVIL: %s mA\n",
+                ftoa(hvilStr, (float)MotorAnalogCapture::HvilCurrent() * 0.1875f, 1));
             //float myFloat = 123.456f;
             // Ensure "full" printf support is enabled in project properties
             //PRINTF("The value is: %f\n", (float)myFloat);

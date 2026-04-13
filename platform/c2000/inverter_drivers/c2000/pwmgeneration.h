@@ -20,9 +20,16 @@
 #include "c2000/current.h"
 #include "c2000/encoder.h"
 #include "c2000/pwmdriver.h"
+#if CONTROL == CTRL_FOC
 #include "focpwmgeneration.h"
+#elif CONTROL == CTRL_SINE
+#include "sinepwmgeneration.h"
+#endif
 
-// Global declaration of our PWM generation class - we only support Field
-// Oriented Control at this point
+#if CONTROL == CTRL_FOC
 typedef FocPwmGeneration<c2000::Current, c2000::Encoder, c2000::PwmDriver>
     PwmGeneration;
+#elif CONTROL == CTRL_SINE
+typedef SinePwmGeneration<c2000::Current, c2000::Encoder, c2000::PwmDriver>
+    PwmGeneration;
+#endif

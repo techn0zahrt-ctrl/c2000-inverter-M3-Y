@@ -27,10 +27,9 @@ namespace c2000 {
  */
 void MotorAnalogCapture::Init()
 {
-    // Initialise all ADC channel identically
+    // Initialise all ADC channels identically
     InitAdcChannel(ADCA_BASE);
     InitAdcChannel(ADCB_BASE);
-    InitAdcChannel(ADCC_BASE);
     InitAdcChannel(ADCD_BASE);
 
     // Wait 1ms until all channels have powered up
@@ -70,21 +69,29 @@ void MotorAnalogCapture::ConfigureSoc(ADC_Trigger trigger)
 
     // Configure the SOC0 for each of the channels
 
-    // ADC-A Input 4 - PHASE A CURRENT SENSOR
+    // ADC-A SOC0 Input 4 - PHASE A CURRENT SENSOR
     ADC_setupSOC(
         ADCA_BASE, ADC_SOC_NUMBER0, trigger, ADC_CH_ADCIN4, sampleWindow);
 
-    // ADC-B Input 1 - RESOLVER COSINE
+    // ADC-A SOC1 Input 0 - RESOLVER SINE
+    ADC_setupSOC(
+        ADCA_BASE, ADC_SOC_NUMBER1, trigger, ADC_CH_ADCIN0, sampleWindow);
+
+    // ADC-B SOC0 Input 1 - RESOLVER COSINE
     ADC_setupSOC(
         ADCB_BASE, ADC_SOC_NUMBER0, trigger, ADC_CH_ADCIN1, sampleWindow);
 
-    // ADC-C Input 2 - PHASE B CURRENT SENSOR
+    // ADC-B SOC1 Input 2 - DC LINK VOLTAGE
     ADC_setupSOC(
-        ADCC_BASE, ADC_SOC_NUMBER0, trigger, ADC_CH_ADCIN2, sampleWindow);
+        ADCB_BASE, ADC_SOC_NUMBER1, trigger, ADC_CH_ADCIN2, sampleWindow);
 
-    // ADC-D Input 12 - RESOLVER SINE
+    // ADC-D SOC0 Input 2 - PHASE B CURRENT SENSOR
     ADC_setupSOC(
-        ADCD_BASE, ADC_SOC_NUMBER0, trigger, ADC_CH_ADCIN12, sampleWindow);
+        ADCD_BASE, ADC_SOC_NUMBER0, trigger, ADC_CH_ADCIN2, sampleWindow);
+
+    // ADC-A SOC2 Input 5 - HVIL CURRENT SENSE
+    ADC_setupSOC(
+        ADCA_BASE, ADC_SOC_NUMBER2, trigger, ADC_CH_ADCIN5, sampleWindow);
 
     //
     // Configure the ADC conversion complete interrupt for motor signals
@@ -103,11 +110,11 @@ uint16_t MotorAnalogCapture::PhaseACurrent()
 }
 
 /**
- * \brief Return phase current reading
+ * \brief Return phase B current reading
  */
 uint16_t MotorAnalogCapture::PhaseBCurrent()
 {
-    return ADC_readResult(ADCCRESULT_BASE, ADC_SOC_NUMBER0);
+    return ADC_readResult(ADCDRESULT_BASE, ADC_SOC_NUMBER0);
 }
 
 /**
@@ -115,7 +122,7 @@ uint16_t MotorAnalogCapture::PhaseBCurrent()
  */
 uint16_t MotorAnalogCapture::ResolverSine()
 {
-    return ADC_readResult(ADCDRESULT_BASE, ADC_SOC_NUMBER0);
+    return ADC_readResult(ADCARESULT_BASE, ADC_SOC_NUMBER1);
 }
 
 /**
@@ -124,6 +131,23 @@ uint16_t MotorAnalogCapture::ResolverSine()
 uint16_t MotorAnalogCapture::ResolverCosine()
 {
     return ADC_readResult(ADCBRESULT_BASE, ADC_SOC_NUMBER0);
+}
+
+/**
+ * \brief Return DC link voltage reading
+ */
+uint16_t MotorAnalogCapture::UdcVoltage()
+{
+    return ADC_readResult(ADCBRESULT_BASE, ADC_SOC_NUMBER1);
+}
+
+/**
+ * \brief Return HVIL current sense reading (ADCINA5)
+ * 1 count = 0.1875 mA (3.3V ref / 4095 counts / 4.3 mV/mA)
+ */
+uint16_t MotorAnalogCapture::HvilCurrent()
+{
+    return ADC_readResult(ADCARESULT_BASE, ADC_SOC_NUMBER2);
 }
 
 } // namespace c2000

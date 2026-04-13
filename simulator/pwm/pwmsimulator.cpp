@@ -17,7 +17,9 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 #include "errormessage.h"
+#if CONTROL == CTRL_FOC
 #include "focpwmgeneration.h"
+#endif
 #include "simulatorcurrent.h"
 #include "simulatorencoder.h"
 #include "simulatorpwmdriver.h"
@@ -57,6 +59,7 @@ int main()
     // Ensure the system thinks we should be going forwards
     Param::SetInt(Param::dir, 1);
 
+#if CONTROL == CTRL_FOC
     // initialise the controller gains from the default parameters
     PwmGeneration::SetControllerGains(
         Param::GetInt(Param::curkp),
@@ -66,6 +69,7 @@ int main()
     // Put in a bit of D and/or Q current to get it to do something
     // Param::Set(Param::manualid, FP_FROMFLT(0.6));
     Param::Set(Param::manualiq, FP_FROMFLT(0.6));
+#endif
 
     // Provide some neutral values for the phase currents
     Current::SetPhase1(2048);

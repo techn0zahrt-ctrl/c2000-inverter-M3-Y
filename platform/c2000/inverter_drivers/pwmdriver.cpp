@@ -97,6 +97,7 @@ void PwmDriver::DisableMasterOutput()
 void PwmDriver::EnableOutput()
 {
     // Not used on the C2000
+    EnableMasterOutput();
 }
 
 /**
@@ -105,6 +106,7 @@ void PwmDriver::EnableOutput()
 void PwmDriver::DisableOutput()
 {
     // Not used on the C2000
+    DisableMasterOutput();
 }
 
 /**
