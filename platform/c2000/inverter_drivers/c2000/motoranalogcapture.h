@@ -40,9 +40,15 @@ public:
     static uint16_t ResolverCosine();
     static uint16_t UdcVoltage();
     static uint16_t HvilCurrent();
+    static uint16_t TempMux();
+
+    static void     InitTempMuxGpio();
+    static void     SetTempMuxChannel(uint8_t channel);
+    static uint8_t  GetTempMuxChannel();
 
 private:
-    static void InitAdcChannel(uint32_t base);
+    static void    InitAdcChannel(uint32_t base);
+    static uint8_t s_tempMuxChannel;
 };
 
 } // namespace c2000

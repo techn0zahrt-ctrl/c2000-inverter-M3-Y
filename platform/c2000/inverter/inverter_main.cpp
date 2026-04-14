@@ -42,6 +42,7 @@
 #include "json_print.h"
 #include "fu.h"
 #include "sine_core.h"
+#include "temp_meas.h"
 
 extern char* ftoa(char* buf, float val, int decimals);
 //#include <inttypes.h>
@@ -156,6 +157,9 @@ void main(void)
     GPIO_setPadConfig(DEVICE_GPIO_PIN_GATE_PSU_ENABLE, GPIO_PIN_TYPE_STD);
     GPIO_setDirectionMode(DEVICE_GPIO_PIN_GATE_PSU_ENABLE, GPIO_DIR_MODE_OUT);
     printf("Gate Drive PSU ON\n");
+
+    // Configure CD4051 temperature mux select lines (GPIO30/31/32)
+    MotorAnalogCapture::InitTempMuxGpio();
 
     DEVICE_DELAY_US(50000);
 
@@ -337,6 +341,42 @@ void main(void)
             char hvilStr[16];
             PRINTF("HVIL: %s mA\n",
                 ftoa(hvilStr, (float)MotorAnalogCapture::HvilCurrent() * 0.1875f, 1));
+
+            // Read all 6 temperature mux channels
+            // ch0=fluid(ignored), ch1=stator(ignored), ch2-4=tmphs, ch5=tmpm
+            {
+                float tmphsMax = -100.0f;
+                float tmpm = 0.0f;
+                char tempStr[16];
+                for (uint8_t ch = 0; ch < 6; ch++)
+                {
+                    MotorAnalogCapture::SetTempMuxChannel(ch);
+                    // Wait >1 PWM period (10kHz=100us) so ADC samples new channel
+                    DEVICE_DELAY_US(200);
+                    uint16_t raw = MotorAnalogCapture::TempMux();
+                    float temp;
+                    if (ch == 5)
+                    {
+                        temp = TempMeas::Lookup(raw, TempMeas::TEMP_TESLA_100K);
+                        tmpm = temp;
+                    }
+                    else
+                    {
+                        temp = TempMeas::Lookup(raw, TempMeas::TEMP_TESLA_52K);
+                        if (ch >= 2 && temp > tmphsMax)
+                            tmphsMax = temp;
+                    }
+                    PRINTF("Temp ch%d: raw=%d temp=%s C\n",
+                        (int)ch, (int)raw, ftoa(tempStr, temp, 1));
+                }
+                if (tmphsMax > -100.0f)
+                    Param::SetFloat(Param::tmphs, tmphsMax);
+                Param::SetFloat(Param::tmpm, tmpm);
+                char tmphsStr[16], tmpmStr[16];
+                PRINTF("tmphs=%s tmpm=%s\n",
+                    ftoa(tmphsStr, tmphsMax, 1), ftoa(tmpmStr, tmpm, 1));
+            }
+
             //float myFloat = 123.456f;
             // Ensure "full" printf support is enabled in project properties
             //PRINTF("The value is: %f\n", (float)myFloat);

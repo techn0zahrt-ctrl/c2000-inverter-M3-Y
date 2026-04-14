@@ -109,6 +109,11 @@ a single CPU should be defined."
 #define DEVICE_GPIO_PIN_GATE_PSU_ENABLE 82
 #define DEVICE_GPIO_PIN_PWM_ENABLE 78
 
+// Tesla M3 Inverter temperature mux (CD4051 select lines)
+#define DEVICE_TESLAM3_GPIO_PIN_TEMP_MUX_S1  30U  // 4051 A (bit 0)
+#define DEVICE_TESLAM3_GPIO_PIN_TEMP_MUX_S2  31U  // 4051 B (bit 1)
+#define DEVICE_TESLAM3_GPIO_PIN_TEMP_MUX_S3  32U  // 4051 C (bit 2)
+
 // M3 Inverter EEPROM
 #define DEVICE_TESLAM3_GPIO_PIN_EEPROM1_CS 23
 

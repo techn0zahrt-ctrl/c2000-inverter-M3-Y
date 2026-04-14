@@ -22,6 +22,8 @@
 
 namespace c2000 {
 
+uint8_t MotorAnalogCapture::s_tempMuxChannel = 0;
+
 /**
  * \brief Initialise the synchronous analog capture
  */
@@ -93,6 +95,10 @@ void MotorAnalogCapture::ConfigureSoc(ADC_Trigger trigger)
     ADC_setupSOC(
         ADCA_BASE, ADC_SOC_NUMBER2, trigger, ADC_CH_ADCIN5, sampleWindow);
 
+    // ADC-B SOC2 Input 3 - TEMPERATURE MUX (CD4051, ADCINB3)
+    ADC_setupSOC(
+        ADCB_BASE, ADC_SOC_NUMBER2, trigger, ADC_CH_ADCIN3, sampleWindow);
+
     //
     // Configure the ADC conversion complete interrupt for motor signals
     //
@@ -148,6 +154,54 @@ uint16_t MotorAnalogCapture::UdcVoltage()
 uint16_t MotorAnalogCapture::HvilCurrent()
 {
     return ADC_readResult(ADCARESULT_BASE, ADC_SOC_NUMBER2);
+}
+
+/**
+ * \brief Return temperature mux ADC reading (ADCINB3, ADCB SOC2)
+ */
+uint16_t MotorAnalogCapture::TempMux()
+{
+    return ADC_readResult(ADCBRESULT_BASE, ADC_SOC_NUMBER2);
+}
+
+/**
+ * \brief Configure GPIO30/31/32 as push-pull outputs for the CD4051 mux
+ * select lines. Must be called before SetTempMuxChannel().
+ */
+void MotorAnalogCapture::InitTempMuxGpio()
+{
+    const uint32_t pins[3] = {
+        DEVICE_TESLAM3_GPIO_PIN_TEMP_MUX_S1,
+        DEVICE_TESLAM3_GPIO_PIN_TEMP_MUX_S2,
+        DEVICE_TESLAM3_GPIO_PIN_TEMP_MUX_S3
+    };
+    for (int i = 0; i < 3; i++)
+    {
+        GPIO_writePin(pins[i], 0);
+        GPIO_setPadConfig(pins[i], GPIO_PIN_TYPE_STD);
+        GPIO_setDirectionMode(pins[i], GPIO_DIR_MODE_OUT);
+    }
+    s_tempMuxChannel = 0;
+}
+
+/**
+ * \brief Select a CD4051 mux channel (0-7) via GPIO30 (S1), GPIO31 (S2),
+ * GPIO32 (S3). Only channels 0-5 are used for Tesla M3 temperature sensing.
+ */
+void MotorAnalogCapture::SetTempMuxChannel(uint8_t channel)
+{
+    s_tempMuxChannel = channel & 0x7U;
+    GPIO_writePin(DEVICE_TESLAM3_GPIO_PIN_TEMP_MUX_S1, (s_tempMuxChannel >> 0) & 1U);
+    GPIO_writePin(DEVICE_TESLAM3_GPIO_PIN_TEMP_MUX_S2, (s_tempMuxChannel >> 1) & 1U);
+    GPIO_writePin(DEVICE_TESLAM3_GPIO_PIN_TEMP_MUX_S3, (s_tempMuxChannel >> 2) & 1U);
+}
+
+/**
+ * \brief Return the currently selected mux channel.
+ */
+uint8_t MotorAnalogCapture::GetTempMuxChannel()
+{
+    return s_tempMuxChannel;
 }
 
 } // namespace c2000
