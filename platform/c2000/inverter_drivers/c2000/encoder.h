@@ -26,23 +26,18 @@
 namespace c2000 {
 
 /**
- * Mock implementation of a motor shaft encoder. This provides the static
- * methods expected by the openinverter classes.
+ * Resolver-based encoder for the Tesla M3 inverter C2000 platform.
+ * Wraps encoder::ResolverEncoder templated on MotorAnalogCapture with
+ * sincosofs offset correction.
  */
 class Encoder
 {
 public:
-    enum mode
-    {
-        SOMETHING,
-        INVALID
-    };
-
-public:
-    static bool SeenNorthSignal();
-    static void UpdateRotorAngle(int dir);
-    static void UpdateRotorFrequency(int callingFrequency);
-    static void SetPwmFrequency(uint32_t frq);
+    static void     Reset();
+    static bool     SeenNorthSignal();
+    static void     UpdateRotorAngle(int dir);
+    static void     UpdateRotorFrequency(int callingFrequency);
+    static void     SetPwmFrequency(uint32_t frq);
 
     static uint16_t GetRotorAngle();
     static u32fp    GetRotorFrequency();

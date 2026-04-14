@@ -140,6 +140,14 @@ __interrupt void motor_control_adc_isr(void)
 
     PwmGeneration::Run();
 
+    // Update DC link voltage every PWM cycle for low-latency protection
+    float udcgain = Param::GetFloat(Param::udcgain);
+    if (udcgain > 0)
+        Param::SetFloat(Param::udc, (float)MotorAnalogCapture::UdcVoltage() / udcgain);
+
+    // Update HVIL current every PWM cycle (1 count = 0.1875 mA)
+    Param::SetFloat(Param::hvilcur, (float)MotorAnalogCapture::HvilCurrent() * 0.1875f);
+
     // Measure the time - handles timer overflows
     uint32_t totalTime = startTime - PerformanceCounter::GetCount();
     execTicks = execTicks + totalTime;

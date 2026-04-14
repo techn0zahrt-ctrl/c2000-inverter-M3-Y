@@ -61,7 +61,7 @@ Active development is on the `portable-cpp` branch of the fork
 * [x] WSL2/Ubuntu build environment support
 * [x] First hardware validation on Tesla FDU inverter (RAM boot via JTAG)
 * [x] PMIC initialization confirmed on hardware
-* [x] Gate driver initialization confirmed on hardware
+* [x] Gate driver initialization confirmed on hardware — working with 3-attempt retry for PSU stabilization; FDU config uses single CFG4 entry applied to all gate driver chips
 * [x] Main loop executing with LED heartbeat on hardware
 * [x] CAN hardware driver working (GPIO4/5 for Tesla M3 RDU)
 * [x] SDO communication working — parameter read/write/dumpall via oic tool
@@ -70,16 +70,50 @@ Active development is on the `portable-cpp` branch of the fork
 * [x] oic tool fully compatible — dumpall, read, write, cmd save/load all functional
 * [x] Debug environment working (CCS VS Code extension with source path mapping)
 * [x] WSL2 CMake build with debug and release configurations
+* [x] SINE firmware build working — FDU (induction motor) build verified
+* [x] ADC channels corrected per hardware pin map
+* [x] DC link voltage sensing (ADCB IN2) working — `udcgain` calibrated to 8.5625 dig/V
+* [x] Phase current sensing corrected — Phase A on ADCA IN4, Phase B on ADCD IN2
+* [x] Resolver sine/cosine corrected — Sine on ADCA IN0, Cosine on ADCB IN1
+* [x] HVIL current sensing — ADCA IN5, readable via `oic read` (1 count ≈ 0.1875 mA)
+* [x] 6-channel temperature mux reading — CD4051 select on GPIO30/31/32, ADC on ADCB IN3; all 6 channels reading correctly (`tmphs` = max of ch2/3/4, `tmpm` = ch5)
+* [x] PWM generation verified — correct 3-phase waveforms confirmed at MCU test points
+* [x] Parameter save/load via SPI EEPROM working correctly
 
 ### In Progress
-* [ ] Gate driver initialization — SPI communication working; config register verification under investigation (CONFIG-mode read ordering)
-* [ ] Extended hardware validation with motor running under load
+* [ ] HVIL loop hardware wiring — firmware support complete; blocked on bench wiring (see [HVIL Wiring](#hvil-wiring) below)
+* [ ] PWM buffer (74245) enable — confirmed blocked by open HVIL loop; motor spin blocked until HVIL wiring complete
+* [ ] Vehicle control / CAN throttle integration — planned after HVIL
 
 ### Not Yet Started
 * [ ] CAN firmware upgrade over openinverter CAN protocol
-* [ ] High Voltage InterLock (HVIL) support
-* [ ] Front drive unit (SINE/induction) hardware validation
+* [ ] Extended hardware validation with motor running under load
+* [ ] Front drive unit (SINE/induction) hardware validation under load
 * [ ] Vehicle integration testing
+
+## HVIL Wiring
+
+The High Voltage Interlock Loop (HVIL) must be completed before the PWM buffer (74245) will enable and the inverter can drive the motor. The firmware already supports HVIL current sensing; only the bench wiring remains.
+
+**What is needed:**
+
+The HVIL is a ~20 mA current loop that passes through two connectors:
+
+1. **LV connector** — pins 4 and 23 (the loop enters on one pin and returns on the other)
+2. **HV connector** — the HVIL pins on the high-voltage connector must also be bridged
+
+Both loops must be completed simultaneously. On a bench without a vehicle harness, use a simple jumper circuit:
+
+```
+12V ──── 560Ω ──── LV pin 4 ──── [inverter internal] ──── LV pin 23 ──── GND
+                                           │
+                              HV HVIL pins also bridged with a jumper
+```
+
+* Target current: **15–24 mA** through the loop (≈ 20 mA with 12V / 560 Ω)
+* Verify with: `oic read hvilcur` — the reading should be in the 15–24 mA range
+* The parameter is updated every PWM cycle (~10 kHz) so readings via oic are always fresh
+* Unit: 1 ADC count ≈ 0.1875 mA (3.3V ref, ADCA IN5, scaling resistor network on board)
 
 ## Compiling
 

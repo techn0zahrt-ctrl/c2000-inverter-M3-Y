@@ -56,8 +56,6 @@ static C2000Can* can __attribute__((unused));
 static CanMap* canMap __attribute__((unused));
 static CanSdo* canSdo __attribute__((unused));
 
-volatile uint32_t testdata = 0;
-
 void Param::Change(Param::PARAM_NUM paramNum)
 {
     switch (paramNum)
@@ -79,6 +77,12 @@ typedef TeslaM3PowerWatchdog<PmicSpiDriver> PowerWatchdog;
 static void taskStrobePowerWatchdog()
 {
     PowerWatchdog::Strobe();
+}
+
+// task called every 100ms to update the resolver frequency estimate (10 Hz)
+static void taskUpdateRotorFrequency()
+{
+    Encoder::UpdateRotorFrequency(10);
 }
 
 static void onPrintRequest(CanSdo* sdo, int request)
@@ -170,6 +174,9 @@ void main(void)
     // add a task to strobe the power watchdog every 100ms
     Scheduler::AddTask(taskStrobePowerWatchdog, 100);
 
+    // add a task to update resolver frequency estimate every 100ms (10 Hz)
+    Scheduler::AddTask(taskUpdateRotorFrequency, 100);
+
     //
     // Set up the gate drivers for PWM operation
     //
@@ -225,6 +232,10 @@ void main(void)
     can = new C2000Can(CANA_BASE);
     can->SetBaudrate(CanHardware::Baud500);
 
+    // Reset resolver encoder: sets startup delay (4000 PWM cycles = 400ms at
+    // 10kHz) so ERR_LORESAMP is suppressed while the exciter signal ramps up
+    Encoder::Reset();
+
     //
     // Enable Global Interrupt (INTM) and realtime interrupt (DBGM)
     //
@@ -260,21 +271,12 @@ void main(void)
     GPIO_setPadConfig(DEVICE_GPIO_PIN_PWM_ENABLE, GPIO_PIN_TYPE_STD);
     GPIO_setDirectionMode(DEVICE_GPIO_PIN_PWM_ENABLE, GPIO_DIR_MODE_OUT);
 
-    EALLOW;
-    uint32_t gpamux1 = HWREG(0x7C00U + 0x6U);
-    uint32_t gpadir = HWREG(0x7C00U + 0xCU);
-    uint32_t gpagmux1 = HWREG(0x7C00U + 0x20U); // GPAGMUX1
-    EDIS;
-    PRINTF("GPAMUX1=0x%x GPADIR=0x%x\n", (uint16_t)gpamux1, (uint16_t)gpadir);
-    PRINTF("GPAGMUX1=0x%x\n", (uint16_t)gpagmux1);
-
     //
     // Loop Forever
     //
     int blinkState = 0;
     int32_t lastLoad = PwmGeneration::GetCpuLoad();
     static int loopCount = 0;
-    //static int printCount = 0;
     while (true)
     {
         canSdo->TriggerTimeout(10);
@@ -303,47 +305,48 @@ void main(void)
         if (loopCount >= 100)
         {
             loopCount = 0;
-            // Test CAN frame - remove after CAN confirmed working
-            //uint32_t testData[2] = { 0x12345678, 0xDEADBEEF };
-            //can->Send(0x123, testData, 8);
-            PRINTF("Test data: %d, 0x%x\n", (uint16_t)testdata, (uint16_t)testdata);
+            int32_t currentLoad = PwmGeneration::GetCpuLoad();
 
-            PRINTF("PhaseA Current = %d, PhaseB Current = %d\n",
-                Param::Get(Param::il1),
-                Param::Get(Param::il2));
-
+            // Gate driver health
             PRINTF("Gate Drive: %s\n", GateDriver::IsFaulty() ? "FAULT" : "OK");
             uint16_t gd_status1[6], gd_status2[6], gd_status3[6];
             GateDriver::GetStatus(gd_status1, gd_status2, gd_status3);
             PRINTF("GD0: S1=0x%x S2=0x%x S3=0x%x\n", gd_status1[0], gd_status2[0], gd_status3[0]);
             PRINTF("GD1: S1=0x%x S2=0x%x S3=0x%x\n", gd_status1[1], gd_status2[1], gd_status3[1]);
             PRINTF("GD2: S1=0x%x S2=0x%x S3=0x%x\n", gd_status1[2], gd_status2[2], gd_status3[2]);
-            int32_t currentLoad = PwmGeneration::GetCpuLoad();
             PRINTF("PWM cycles: %d\n", currentLoad - lastLoad);
 
+            // DC link voltage (also updated in ISR; refresh boost/weakening here)
             MotorVoltage::SetBoost(Param::GetInt(Param::boost));
             MotorVoltage::SetWeakeningFrq(Param::GetFloat(Param::fweakstrt));
-            float udc = (float)MotorAnalogCapture::UdcVoltage() / Param::GetFloat(Param::udcgain);
-            Param::SetFloat(Param::udc, udc);
             char udcStr[16];
-            PRINTF("UDC udc=%s\n", ftoa(udcStr, udc, 1));
-            PRINTF("ampNomLimited=%d amp=%u ampnom=%d fstat=%d\n",
-                (int16_t)PwmGeneration::GetDebugAmpNomLimited(),
-                (uint16_t)PwmGeneration::GetDebugAmp(),
-                (int16_t)Param::Get(Param::ampnom),
-                (int16_t)Param::Get(Param::fstat));
-            PRINTF("Phase A raw=%d Phase B raw=%d\n",
-                MotorAnalogCapture::PhaseACurrent(),
-                MotorAnalogCapture::PhaseBCurrent());
-            PRINTF("Resolver Sine raw=%d Cosine raw=%d\n",
-                MotorAnalogCapture::ResolverSine(),
-                MotorAnalogCapture::ResolverCosine());
+            PRINTF("UDC: %s V\n", ftoa(udcStr, Param::GetFloat(Param::udc), 1));
+
+            // Phase currents
+            PRINTF("Il1: %d A  Il2: %d A\n",
+                (int16_t)Param::Get(Param::il1),
+                (int16_t)Param::Get(Param::il2));
+
+            // Resolver — raw, offset-corrected, and calculated angle
+            {
+                int16_t sinRaw = (int16_t)MotorAnalogCapture::ResolverSine();
+                int16_t cosRaw = (int16_t)MotorAnalogCapture::ResolverCosine();
+                int16_t offset = (int16_t)Param::GetInt(Param::sincosofs);
+                int16_t sinC   = sinRaw - offset;
+                int16_t cosC   = cosRaw - offset;
+                char angleStr[16];
+                PRINTF("Resolver: raw(sin=%d cos=%d) centered(sin=%d cos=%d) angle=%s deg\n",
+                    (int)sinRaw, (int)cosRaw,
+                    (int)sinC,   (int)cosC,
+                    ftoa(angleStr, Param::GetFloat(Param::angle), 1));
+            }
+
+            // HVIL current
             char hvilStr[16];
             PRINTF("HVIL: %s mA\n",
-                ftoa(hvilStr, (float)MotorAnalogCapture::HvilCurrent() * 0.1875f, 1));
+                ftoa(hvilStr, Param::GetFloat(Param::hvilcur), 1));
 
-            // Read all 6 temperature mux channels
-            // ch0=fluid(ignored), ch1=stator(ignored), ch2-4=tmphs, ch5=tmpm
+            // Temperature mux — all 6 channels, update tmphs/tmpm params
             {
                 float tmphsMax = -100.0f;
                 float tmpm = 0.0f;
@@ -351,7 +354,6 @@ void main(void)
                 for (uint8_t ch = 0; ch < 6; ch++)
                 {
                     MotorAnalogCapture::SetTempMuxChannel(ch);
-                    // Wait >1 PWM period (10kHz=100us) so ADC samples new channel
                     DEVICE_DELAY_US(200);
                     uint16_t raw = MotorAnalogCapture::TempMux();
                     float temp;
@@ -366,27 +368,18 @@ void main(void)
                         if (ch >= 2 && temp > tmphsMax)
                             tmphsMax = temp;
                     }
-                    PRINTF("Temp ch%d: raw=%d temp=%s C\n",
+                    PRINTF("Temp ch%d: raw=%d %s C\n",
                         (int)ch, (int)raw, ftoa(tempStr, temp, 1));
                 }
                 if (tmphsMax > -100.0f)
                     Param::SetFloat(Param::tmphs, tmphsMax);
                 Param::SetFloat(Param::tmpm, tmpm);
                 char tmphsStr[16], tmpmStr[16];
-                PRINTF("tmphs=%s tmpm=%s\n",
+                PRINTF("tmphs=%s C  tmpm=%s C\n",
                     ftoa(tmphsStr, tmphsMax, 1), ftoa(tmpmStr, tmpm, 1));
             }
 
-            //float myFloat = 123.456f;
-            // Ensure "full" printf support is enabled in project properties
-            //PRINTF("The value is: %f\n", (float)myFloat);
-            //PRINTF("data[1] hi=0x%x lo=0x%x\n", 
-            //    (uint16_t)(canLastStatus >> 16),
-            //    (uint16_t)canLastStatus);
             lastLoad = currentLoad;
-            // Blink pattern: 2x green, 2x red, Repeat
-            // States 0,1 = green on/off, States 2,3 = green on/off,
-            // States 4,5 = red on/off, States 6,7 = red on/off
         }
         if (loopCount % 25 == 0)
         {

@@ -192,6 +192,7 @@
     VALUE_ENTRY(oilpres,     "psi",   2064 ) \
     VALUE_ENTRY(upmp,        "V",     2065 ) \
     VALUE_ENTRY(pmprev,      "rpm",   2066 ) \
+    VALUE_ENTRY(hvilcur,     "mA",    2068 ) \
     VALUE_ENTRY(cpuload,     "%",     2035 ) \
 
 #define VALUES_SINE \
