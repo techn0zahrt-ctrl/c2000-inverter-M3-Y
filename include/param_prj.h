@@ -32,11 +32,11 @@
     PARAM_ENTRY(CAT_MOTOR,   polepairs,   "",        1,      16,     2,      32  ) \
     PARAM_ENTRY(CAT_MOTOR,   respolepairs,"",        1,      16,     1,      93  ) \
     PARAM_ENTRY(CAT_MOTOR,   sincosofs,   "dig",     1,      4096L,  2048L,  131 ) \
-    PARAM_ENTRY(CAT_MOTOR,   encmode,     ENCMODES,  0,      5,      0,      75  ) \
+    PARAM_ENTRY(CAT_MOTOR,   encmode,     ENCMODES,  0,      5,      4,      75  ) \
     PARAM_ENTRY(CAT_MOTOR,   fmax,        "Hz",      21,     1000,   200,    9   ) \
     PARAM_ENTRY(CAT_MOTOR,   numimp,      "ppr",     8,      8192L,   60,     15  ) \
     PARAM_ENTRY(CAT_MOTOR,   dirchrpm,    "rpm",     0,      20000L, 100,    87  ) \
-    PARAM_ENTRY(CAT_MOTOR,   dirmode,     DIRMODES,  0,      4,      1,      95  ) \
+    PARAM_ENTRY(CAT_MOTOR,   dirmode,     DIRMODES,  0,      4,      4,      95  ) \
     PARAM_ENTRY(CAT_MOTOR,   snsm,        SNS_M,     12,     22,     12,     46  )
 
 #define MOTOR_PARAMETERS_SINE \
@@ -61,7 +61,7 @@
 #define INVERTER_PARAMETERS_COMMON \
     PARAM_ENTRY(CAT_INVERTER,pwmfrq,      PWMFRQS,   0,      2,      1,      13  ) \
     PARAM_ENTRY(CAT_INVERTER,pwmpol,      PWMPOLS,   0,      1,      0,      52  ) \
-    PARAM_ENTRY(CAT_INVERTER,deadtime,    "dig",     0,      255,    63,     14  ) \
+    PARAM_ENTRY(CAT_INVERTER,deadtime,    "ns",      0,      4000,   875,    14  ) \
     PARAM_ENTRY(CAT_INVERTER,ocurlim,     "A",       -65536L, 65536L,100,    22  ) \
     PARAM_ENTRY(CAT_INVERTER,il1gain,     "dig/A",   -100,   100,    4.7,    27  ) \
     PARAM_ENTRY(CAT_INVERTER,il2gain,     "dig/A",   -100,   100,    4.7,    28  ) \

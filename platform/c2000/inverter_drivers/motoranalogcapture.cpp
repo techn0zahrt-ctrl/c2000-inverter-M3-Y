@@ -96,8 +96,10 @@ void MotorAnalogCapture::ConfigureSoc(ADC_Trigger trigger)
         ADCA_BASE, ADC_SOC_NUMBER2, trigger, ADC_CH_ADCIN5, sampleWindow);
 
     // ADC-B SOC2 Input 3 - TEMPERATURE MUX (CD4051, ADCINB3)
+    // Software trigger only: the mux channel is switched in the slow diagnostic
+    // loop and we need a fresh conversion after settling, not the EPWM-synced one.
     ADC_setupSOC(
-        ADCB_BASE, ADC_SOC_NUMBER2, trigger, ADC_CH_ADCIN3, sampleWindow);
+        ADCB_BASE, ADC_SOC_NUMBER2, ADC_TRIGGER_SW_ONLY, ADC_CH_ADCIN3, sampleWindow);
 
     //
     // Configure the ADC conversion complete interrupt for motor signals
@@ -105,6 +107,11 @@ void MotorAnalogCapture::ConfigureSoc(ADC_Trigger trigger)
     ADC_setInterruptSource(ADCA_BASE, ADC_INT_NUMBER1, ADC_SOC_NUMBER0);
     ADC_enableInterrupt(ADCA_BASE, ADC_INT_NUMBER1);
     ADC_clearInterruptStatus(ADCA_BASE, ADC_INT_NUMBER1);
+
+    // Configure ADCB INT2 on SOC2 so TempMux() can poll for conversion complete
+    ADC_setInterruptSource(ADCB_BASE, ADC_INT_NUMBER2, ADC_SOC_NUMBER2);
+    ADC_enableInterrupt(ADCB_BASE, ADC_INT_NUMBER2);
+    ADC_clearInterruptStatus(ADCB_BASE, ADC_INT_NUMBER2);
 }
 
 /**
@@ -157,10 +164,16 @@ uint16_t MotorAnalogCapture::HvilCurrent()
 }
 
 /**
- * \brief Return temperature mux ADC reading (ADCINB3, ADCB SOC2)
+ * \brief Trigger a software ADC conversion for the temp mux channel and return
+ * the result. Blocks until the conversion is complete (typically < 1 µs).
+ * Call SetTempMuxChannel() and allow ≥200 µs settling before calling this.
  */
 uint16_t MotorAnalogCapture::TempMux()
 {
+    ADC_clearInterruptStatus(ADCB_BASE, ADC_INT_NUMBER2);
+    ADC_forceSOC(ADCB_BASE, ADC_SOC_NUMBER2);
+    while (!ADC_getInterruptStatus(ADCB_BASE, ADC_INT_NUMBER2))
+        ;
     return ADC_readResult(ADCBRESULT_BASE, ADC_SOC_NUMBER2);
 }
 

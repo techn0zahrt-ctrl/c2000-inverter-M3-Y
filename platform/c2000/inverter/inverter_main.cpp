@@ -212,9 +212,6 @@ void main(void)
     // Ensure the system thinks we should be going forwards
     Param::SetInt(Param::dir, 1);
 
-    // Override the default deadtime as the C2000 uses values in nS rather
-    // than a coded STM32 value
-    Param::SetInt(Param::deadtime, 875);
 
 #if CONTROL == CTRL_FOC
     // initialise the controller gains from the default parameters
