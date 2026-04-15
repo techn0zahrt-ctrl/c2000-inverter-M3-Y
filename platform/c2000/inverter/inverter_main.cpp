@@ -43,6 +43,7 @@
 #include "fu.h"
 #include "sine_core.h"
 #include "temp_meas.h"
+#include "throttle.h"
 
 extern char* ftoa(char* buf, float val, int decimals);
 //#include <inttypes.h>
@@ -60,13 +61,91 @@ void Param::Change(Param::PARAM_NUM paramNum)
 {
     switch (paramNum)
     {
+#if CONTROL == CTRL_SINE
         case Param::ampnom:
             PwmGeneration::SetAmpnom(Param::Get(Param::ampnom));
             break;
         case Param::fslipspnt:
             PwmGeneration::SetFslip(Param::Get(Param::fslipspnt));
             break;
+#endif // CTRL_SINE
+
+        case Param::canspeed:
+            if (can)
+                can->SetBaudrate(
+                    (CanHardware::baudrates)Param::GetInt(Param::canspeed));
+            break;
+
+        case Param::nodeid:
+            if (canSdo)
+                canSdo->SetNodeId(Param::GetInt(Param::nodeid));
+            break;
+
+        // Throttle limit params that may be set frequently via CAN
+        case Param::throtmax:
+        case Param::throtmin:
+        case Param::idcmin:
+        case Param::idcmax:
+            Throttle::throtmax = Param::GetFloat(Param::throtmax);
+            Throttle::throtmin = Param::GetFloat(Param::throtmin);
+            Throttle::idcmin   = Param::GetFloat(Param::idcmin);
+            Throttle::idcmax   = Param::GetFloat(Param::idcmax);
+            break;
+
         default:
+            // Current limit and pole pair ratio
+            PwmGeneration::SetCurrentLimitThreshold(Param::Get(Param::ocurlim));
+            PwmGeneration::SetPolePairRatio(
+                Param::GetInt(Param::polepairs) /
+                Param::GetInt(Param::respolepairs));
+
+#if CONTROL == CTRL_FOC
+            // FOC controller gains
+            PwmGeneration::SetControllerGains(
+                Param::GetInt(Param::curkp),
+                Param::GetInt(Param::curki),
+                Param::GetInt(Param::fwkp));
+#endif // CTRL_FOC
+
+            // Motor voltage (SINE only; FOC ignores these)
+            MotorVoltage::SetBoost(Param::GetInt(Param::boost));
+            MotorVoltage::SetWeakeningFrq(Param::GetFloat(Param::fweakstrt));
+
+            // Throttle pot calibration
+            Throttle::potmin[0] = Param::GetInt(Param::potmin);
+            Throttle::potmax[0] = Param::GetInt(Param::potmax);
+            Throttle::potmin[1] = Param::GetInt(Param::pot2min);
+            Throttle::potmax[1] = Param::GetInt(Param::pot2max);
+
+            // Regen / braking
+            Throttle::brknom      = Param::GetFloat(Param::brknom);
+            Throttle::brknompedal = Param::GetFloat(Param::brknompedal);
+            Throttle::brkmax      = Param::GetFloat(Param::brkmax);
+            Throttle::brkcruise   = Param::GetFloat(Param::brkcruise);
+            Throttle::regenRamp   = Param::GetFloat(Param::regenramp);
+
+            // Throttle limits and ramp
+            Throttle::throtmax    = Param::GetFloat(Param::throtmax);
+            Throttle::throtmin    = Param::GetFloat(Param::throtmin);
+            Throttle::throttleRamp = Param::GetFloat(Param::throtramp);
+
+            // Speed / idle control
+            Throttle::idleSpeed    = Param::GetInt(Param::idlespeed);
+            Throttle::speedkp      = Param::GetFloat(Param::speedkp);
+            Throttle::speedflt     = Param::GetInt(Param::speedflt);
+            Throttle::idleThrotLim = Param::GetFloat(Param::idlethrotlim);
+
+            // BMS torque limiting
+            Throttle::bmslimhigh = Param::GetInt(Param::bmslimhigh);
+            Throttle::bmslimlow  = Param::GetInt(Param::bmslimlow);
+
+            // Voltage and current derating
+            Throttle::udcmin = Param::GetFloat(Param::udcmin) * 0.99f;
+            Throttle::udcmax = Param::GetFloat(Param::udcmax) * 1.01f;
+            Throttle::idcmin = Param::GetFloat(Param::idcmin);
+            Throttle::idcmax = Param::GetFloat(Param::idcmax);
+            Throttle::idckp  = Param::GetFloat(Param::idckp);
+            Throttle::fmax   = Param::GetFloat(Param::fmax);
             break;
     }
 }
