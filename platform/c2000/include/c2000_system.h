@@ -39,22 +39,34 @@
 /*
  * Trigger a full device software reset.
  *
- * Equivalent to the Cortex-M SCB AIRCR SYSRESETREQ mechanism used by
- * libopencm3's scb_reset_system(). Writes an invalid key to the C28x
- * watchdog control register (WDCR, address 0x7029), which forces an
- * immediate watchdog reset of the entire device.
+ * Equivalent to the Cortex-M SCB AIRCR SYSRESETREQ / libopencm3
+ * scb_reset_system(). Mirrors the TI driverlib SysCtl_resetDevice() sequence:
+ *
+ *   1. EALLOW  — unlock protected register space
+ *   2. Write 0x0028 (WDCHK=101, WDDIS=0) to WDCR — re-enables the watchdog
+ *      with the valid check-bit pattern so the write is accepted
+ *   3. Write 0x0000 (WDCHK=000) to WDCR — invalid check bits cause an
+ *      immediate watchdog reset of the entire device
+ *   4. EDIS / while(1) — never reached; satisfies static analysis tools
+ *
+ * WDCR is at word address 0x7029 (WD_BASE=0x7000 + SYSCTL_O_WDCR=0x29).
+ * WDCHK occupies bits [5:3]; valid value = 101 (0x0028); any other value
+ * with the watchdog enabled triggers an immediate reset.
+ *
+ * Note: Device_init() calls SysCtl_disableWatchdog(), so the watchdog is
+ * disabled by the time we get here. The first write re-enables it before
+ * the second write triggers the reset.
  *
  * This function does not return.
  */
 static inline void scb_reset_system(void)
 {
-    /* Write invalid key to WDCR to force watchdog reset.
-     * WDCR is a 16-bit register at C28x data-space address 0x7029.
-     * Valid key = 0x05 in bits [7:3]; 0x0028 has key=0 which is invalid. */
-    volatile unsigned int *wdcr = (volatile unsigned int *)0x7029U;
-    *wdcr = 0x0028U;
-    /* Should not reach here; add infinite loop for static analysis tools */
-    while (1) {}
+    volatile uint16_t* wdcr = (volatile uint16_t*)0x7029U;
+    __asm(" EALLOW");
+    *wdcr = 0x0028U; /* valid key, WDDIS=0 — re-enable watchdog */
+    *wdcr = 0x0000U; /* invalid key — triggers immediate reset    */
+    __asm(" EDIS");
+    while (1) {} /* never reached */
 }
 
 /*
@@ -93,5 +105,18 @@ static inline void scb_reset_system(void)
 #define DESIG_UNIQUE_ID0  (*(volatile uint32_t*)0x5D228UL)
 #define DESIG_UNIQUE_ID1  (*(volatile uint32_t*)0x5D22AUL)
 #define DESIG_UNIQUE_ID2  0UL
+
+/*
+ * Software reset — jumps to the C runtime entry point (_c_int00) after
+ * disabling interrupts. Correct soft-reset for RAM-loaded C2000 firmware.
+ * Implemented in softreset.c (plain C to avoid C++ name mangling of _c_int00).
+ */
+#ifdef __cplusplus
+extern "C" {
+#endif
+void SoftReset(void);
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* C2000_SYSTEM_H_INCLUDED */

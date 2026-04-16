@@ -99,7 +99,14 @@ void SdoCommands::ProcessStandardCommands(CanSdo::SdoFrame* sdoFrame)
          Param::Change(Param::PARAM_LAST);
          break;
       case SDO_CMD_RESET:
+#ifdef C2000
+         // On C2000 the firmware runs from RAM, so a hardware watchdog reset
+         // would just halt. SoftReset() disables interrupts and jumps to the
+         // C runtime entry point (_c_int00), re-running full initialisation.
+         SoftReset();
+#else
          scb_reset_system();
+#endif
          break;
       case SDO_CMD_DEFAULTS:
          Param::LoadDefaults();

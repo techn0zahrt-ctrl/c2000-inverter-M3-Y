@@ -233,9 +233,7 @@ void main(void)
     Interrupt_initVectorTable();
     //
 
-    //*/
     // Turn on the gate drive PSU
-    //
     GPIO_writePin(DEVICE_GPIO_PIN_GATE_PSU_ENABLE, 0);
     GPIO_setPadConfig(DEVICE_GPIO_PIN_GATE_PSU_ENABLE, GPIO_PIN_TYPE_STD);
     GPIO_setDirectionMode(DEVICE_GPIO_PIN_GATE_PSU_ENABLE, GPIO_DIR_MODE_OUT);
@@ -244,21 +242,31 @@ void main(void)
     // Configure CD4051 temperature mux select lines (GPIO30/31/32)
     MotorAnalogCapture::InitTempMuxGpio();
 
+    // Allow gate PSU to stabilise before loading parameters
     DEVICE_DELAY_US(50000);
 
+    // Set up the error message log and load default parameters
+    ErrorMessage::ResetAll();
+    // TODO: Figure out where the timer tick comes from to increment this
+    ErrorMessage::SetTime(1);
+    Param::LoadDefaults();
+
+    // Load saved parameters from SPI EEPROM (slow — must be before watchdog)
+    EEPROM::InitSPI();
+    int loadResult = parm_load();
+
+    // Initialise scheduler and PMIC watchdog now that slow EEPROM reads are
+    // done so the 100ms window watchdog doesn't expire during parm_load()
     Scheduler::Init();
     printf("Pmic driver initialisation: %s\n",
         PowerWatchdog::Init() == PowerWatchdog::OK ? "OK" : "Fail");
 
-    // add a task to strobe the power watchdog every 100ms
+    // Add periodic tasks: watchdog strobe and resolver frequency update (100ms)
     Scheduler::AddTask(taskStrobePowerWatchdog, 100);
-
-    // add a task to update resolver frequency estimate every 100ms (10 Hz)
     Scheduler::AddTask(taskUpdateRotorFrequency, 100);
 
-    //
-    // Set up the gate drivers for PWM operation
-    //
+    // Set up gate drivers — must be after PMIC init since gate PSU depends on
+    // PMIC reaching NORMAL state
     printf("Gate Drive initialisation: ");
     if (GateDriver::Init())
     {
@@ -270,17 +278,6 @@ void main(void)
         printf("Fail\n");
     }
 
-    // Set up the error message log and set operating parameters to default
-    ErrorMessage::ResetAll();
-    // TODO: Figure out where the timer tick comes from to increment this
-    ErrorMessage::SetTime(1);
-    Param::LoadDefaults();
-
-    // Initialize EEPROM
-    EEPROM::InitSPI();
-    // Load CAN map from EEPROM if valid
-    int loadResult = parm_load();
-
     // Configure the PWM generation
     PwmGeneration::SetCurrentOffset(2048, 2048);
 
@@ -290,7 +287,6 @@ void main(void)
 
     // Ensure the system thinks we should be going forwards
     Param::SetInt(Param::dir, 1);
-
 
 #if CONTROL == CTRL_FOC
     // initialise the controller gains from the default parameters
@@ -303,7 +299,6 @@ void main(void)
     Param::Set(Param::manualiq, FP_FROMFLT(0.6));
 #endif
 
-//*/
     // Initialize CAN at 500kbps
     can = new C2000Can(CANA_BASE);
     can->SetBaudrate(CanHardware::Baud500);
@@ -391,6 +386,22 @@ void main(void)
             PRINTF("GD1: S1=0x%x S2=0x%x S3=0x%x\n", gd_status1[1], gd_status2[1], gd_status3[1]);
             PRINTF("GD2: S1=0x%x S2=0x%x S3=0x%x\n", gd_status1[2], gd_status2[2], gd_status3[2]);
             PRINTF("PWM cycles: %d\n", currentLoad - lastLoad);
+
+            // PMIC status registers
+            {
+                uint16_t devstat = 0, syssf = 0, monsf0 = 0, monsf1 = 0, monsf2 = 0;
+                if (PowerWatchdog::ReadStatusRegisters(devstat, syssf, monsf0, monsf1, monsf2) ==
+                    PowerWatchdog::OK)
+                {
+                    PRINTF("PMIC: DEVSTAT=0x%02x SYSSF=0x%02x MONSF0=0x%02x MONSF1=0x%02x MONSF2=0x%02x\n",
+                        (unsigned)devstat, (unsigned)syssf,
+                        (unsigned)monsf0, (unsigned)monsf1, (unsigned)monsf2);
+                }
+                else
+                {
+                    PRINTF("PMIC: status read failed\n");
+                }
+            }
 
             // DC link voltage (also updated in ISR; refresh boost/weakening here)
             MotorVoltage::SetBoost(Param::GetInt(Param::boost));

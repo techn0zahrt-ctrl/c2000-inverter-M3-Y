@@ -141,6 +141,32 @@ public:
      *  Thus a functional watchdog quest only needs to be answered every second
      * WW period.
      */
+    /**
+     * \brief Read the key TLF35584 status registers for diagnostics.
+     *
+     * \param devstat  Device state register (DEVSTAT, 0x27) — NORMAL = 0x02
+     * \param syssf    System status flags (SYSSF, 0x1D)
+     * \param monsf0   Monitor status flags 0 (MONSF0, 0x20)
+     * \param monsf1   Monitor status flags 1 (MONSF1, 0x21)
+     * \param monsf2   Monitor status flags 2 (MONSF2, 0x22)
+     * \return OK, or the first error encountered during SPI read
+     */
+    static Error ReadStatusRegisters(
+        uint16_t& devstat,
+        uint16_t& syssf,
+        uint16_t& monsf0,
+        uint16_t& monsf1,
+        uint16_t& monsf2)
+    {
+        Error result;
+        CHECK(ReadRegister(TLF35584_DEVSTAT, devstat));
+        CHECK(ReadRegister(TLF35584_SYSSF,   syssf));
+        CHECK(ReadRegister(TLF35584_MONSF0,  monsf0));
+        CHECK(ReadRegister(TLF35584_MONSF1,  monsf1));
+        CHECK(ReadRegister(TLF35584_MONSF2,  monsf2));
+        return OK;
+    }
+
     static Error Strobe()
     {
         Error result;
