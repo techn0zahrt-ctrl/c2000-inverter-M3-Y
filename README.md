@@ -79,11 +79,11 @@ Active development is on the `portable-cpp` branch of the fork
 * [x] 6-channel temperature mux reading — CD4051 select on GPIO30/31/32, ADC on ADCB IN3; all 6 channels reading correctly (`tmphs` = max of ch2/3/4, `tmpm` = ch5)
 * [x] PWM generation verified — correct 3-phase waveforms confirmed at MCU test points
 * [x] Parameter save/load via SPI EEPROM working correctly
+* [x] HVIL loop hardware wiring validated — 13–20 mA confirmed via `oic read hvilcur`; HV discharge resistors disable when loop is closed
 
 ### In Progress
-* [ ] HVIL loop hardware wiring — firmware support complete; blocked on bench wiring (see [HVIL Wiring](#hvil-wiring) below)
-* [ ] PWM buffer (74245) enable — confirmed blocked by open HVIL loop; motor spin blocked until HVIL wiring complete
-* [ ] Vehicle control / CAN throttle integration — planned after HVIL
+* [ ] PWM buffer (74245) enable — controlled by TLF35584 SS2 (not HVIL); under investigation
+* [ ] Vehicle control / CAN throttle integration — planned after PWM buffer
 
 ### Not Yet Started
 * [ ] CAN firmware upgrade over openinverter CAN protocol
@@ -93,27 +93,37 @@ Active development is on the `portable-cpp` branch of the fork
 
 ## HVIL Wiring
 
-The High Voltage Interlock Loop (HVIL) must be completed before the PWM buffer (74245) will enable and the inverter can drive the motor. The firmware already supports HVIL current sensing; only the bench wiring remains.
+The HVIL is a ~20 mA current loop that must be closed to satisfy the hardware safety logic. When the loop is closed, the HV discharge resistors are disabled. **The PWM output buffer (74245) is controlled separately by the TLF35584 PMIC SS2 signal — it is not gated by HVIL.**
 
-**What is needed:**
+### Confirmed loop order (bench wiring)
 
-The HVIL is a ~20 mA current loop that passes through two connectors:
-
-1. **LV connector** — pins 4 and 23 (the loop enters on one pin and returns on the other)
-2. **HV connector** — the HVIL pins on the high-voltage connector must also be bridged
-
-Both loops must be completed simultaneously. On a bench without a vehicle harness, use a simple jumper circuit:
+Current flows in this order:
 
 ```
-12V ──── 560Ω ──── LV pin 4 ──── [inverter internal] ──── LV pin 23 ──── GND
-                                           │
-                              HV HVIL pins also bridged with a jumper
+12V supply (or PSU current-limited to 20 mA)
+  │
+  ├─ resistor (~560 Ω for 20 mA with 12V, or use PSU current limit)
+  │
+HV connector — HVIL IN
+  │
+HV connector — HVIL OUT
+  │
+LV connector — pin 23 (HVIL IN)
+  │
+LV connector — pin 4  (HVIL OUT)
+  │
+GND
 ```
 
-* Target current: **15–24 mA** through the loop (≈ 20 mA with 12V / 560 Ω)
-* Verify with: `oic read hvilcur` — the reading should be in the 15–24 mA range
-* The parameter is updated every PWM cycle (~10 kHz) so readings via oic are always fresh
+Both the HV connector HVIL pins and LV connector pins 4/23 must be in the loop simultaneously.
+
+### Verification
+
+* Target current: **15–24 mA** (nominal 20 mA)
+* Confirmed reading: **13–20 mA** via `oic read hvilcur`
+* The parameter is updated every PWM cycle (~10 kHz) so readings are always fresh
 * Unit: 1 ADC count ≈ 0.1875 mA (3.3V ref, ADCA IN5, scaling resistor network on board)
+* When the loop is closed, the HV discharge resistors turn off (visible as a change in quiescent current)
 
 ## Compiling
 
