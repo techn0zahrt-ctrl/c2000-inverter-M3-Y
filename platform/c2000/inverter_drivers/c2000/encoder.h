@@ -42,6 +42,7 @@ public:
     static uint16_t GetRotorAngle();
     static u32fp    GetRotorFrequency();
     static int      GetRotorDirection();
+    static int      GetSpeed();
 };
 
 } // namespace c2000

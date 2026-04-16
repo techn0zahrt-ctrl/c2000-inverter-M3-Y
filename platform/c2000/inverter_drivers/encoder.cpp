@@ -243,6 +243,14 @@ u32fp Encoder::GetRotorFrequency()
     return FP_FROMFLT(s_lastFrequency);
 }
 
+/** Return motor speed in RPM (electrical frequency * 60 / pole pairs). */
+int Encoder::GetSpeed()
+{
+    int polepairs = Param::GetInt(Param::polepairs);
+    if (polepairs == 0) polepairs = 1;
+    return (int)(FP_TOFLOAT(GetRotorFrequency()) * 60.0f / polepairs);
+}
+
 /** Return -1 (backwards), 0 (stationary), or 1 (forwards). */
 int Encoder::GetRotorDirection()
 {

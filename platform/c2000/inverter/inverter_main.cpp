@@ -44,11 +44,17 @@
 #include "sine_core.h"
 #include "temp_meas.h"
 #include "throttle.h"
+#include "canlogger.h"
 
 extern char* ftoa(char* buf, float val, int decimals);
-//#include <inttypes.h>
 
+// Define USE_CIO_DEBUG to send debug output via CIO (JTAG) instead of CAN.
+// CAN logging is the default for standalone (non-JTAG) operation.
+#ifdef USE_CIO_DEBUG
 #define PRINTF(...) do { DINT; printf(__VA_ARGS__); EINT; } while(0)
+#else
+#define PRINTF(...) CanLogger::Printf(__VA_ARGS__)
+#endif
 
 // Pull in the whole C2000 namespace as this is platform specific code obviously
 using namespace c2000;
@@ -162,6 +168,7 @@ static void taskStrobePowerWatchdog()
 static void taskUpdateRotorFrequency()
 {
     Encoder::UpdateRotorFrequency(10);
+    Param::SetInt(Param::speed, Encoder::GetSpeed());
 }
 
 static void onPrintRequest(CanSdo* sdo, int request)
@@ -237,7 +244,7 @@ void main(void)
     GPIO_writePin(DEVICE_GPIO_PIN_GATE_PSU_ENABLE, 0);
     GPIO_setPadConfig(DEVICE_GPIO_PIN_GATE_PSU_ENABLE, GPIO_PIN_TYPE_STD);
     GPIO_setDirectionMode(DEVICE_GPIO_PIN_GATE_PSU_ENABLE, GPIO_DIR_MODE_OUT);
-    printf("Gate Drive PSU ON\n");
+    PRINTF("Gate Drive PSU ON\n");
 
     // Configure CD4051 temperature mux select lines (GPIO30/31/32)
     MotorAnalogCapture::InitTempMuxGpio();
@@ -258,7 +265,7 @@ void main(void)
     // Initialise scheduler and PMIC watchdog now that slow EEPROM reads are
     // done so the 100ms window watchdog doesn't expire during parm_load()
     Scheduler::Init();
-    printf("Pmic driver initialisation: %s\n",
+    PRINTF("Pmic driver initialisation: %s\n",
         PowerWatchdog::Init() == PowerWatchdog::OK ? "OK" : "Fail");
 
     // Add periodic tasks: watchdog strobe and resolver frequency update (100ms)
@@ -267,15 +274,14 @@ void main(void)
 
     // Set up gate drivers — must be after PMIC init since gate PSU depends on
     // PMIC reaching NORMAL state
-    printf("Gate Drive initialisation: ");
     if (GateDriver::Init())
     {
-        printf("OK\n");
+        PRINTF("Gate Drive initialisation: OK\n");
         GateDriver::Enable();
     }
     else
     {
-        printf("Fail\n");
+        PRINTF("Gate Drive initialisation: Fail\n");
     }
 
     // Configure the PWM generation
@@ -302,6 +308,7 @@ void main(void)
     // Initialize CAN at 500kbps
     can = new C2000Can(CANA_BASE);
     can->SetBaudrate(CanHardware::Baud500);
+    CanLogger::Init(can);
 
     // Reset resolver encoder: sets startup delay (4000 PWM cycles = 400ms at
     // 10kHz) so ERR_LORESAMP is suppressed while the exciter signal ramps up
@@ -372,8 +379,11 @@ void main(void)
 
         DEVICE_DELAY_US(5000);
 
+        //char angleStr[16];
+        //PRINTF("Angle: %s\n", ftoa(angleStr, Param::GetFloat(Param::angle), 1));
+
         loopCount++;
-        if (loopCount >= 100)
+        if (loopCount >= 400)
         {
             loopCount = 0;
             int32_t currentLoad = PwmGeneration::GetCpuLoad();

@@ -80,16 +80,58 @@ Active development is on the `portable-cpp` branch of the fork
 * [x] PWM generation verified — correct 3-phase waveforms confirmed at MCU test points
 * [x] Parameter save/load via SPI EEPROM working correctly
 * [x] HVIL loop hardware wiring validated — 13–20 mA confirmed via `oic read hvilcur`; HV discharge resistors disable when loop is closed
+* [x] PMIC TLF35584 watchdog working correctly — startup sequence reordered so EEPROM load completes before watchdog starts, preventing timeout during `parm_load()`
+* [x] PWM buffer (74245) enable confirmed working — PMIC must be in NORMAL state (DEVSTAT=0x02) for SS2 to assert and enable the buffer
+* [x] `oic cmd reset` working — implemented via `_c_int00()` software restart (jumps to C runtime entry point, re-runs full initialisation without requiring hardware reset)
+* [x] **Tesla Model 3 FDU (induction motor) first successful spin under openinverter firmware** — motor controlled via `oic write ampnom` and `oic write fslipspnt`; confirmed running smoothly at 1 A, 120 V DC, speed tracks slip frequency
+* [x] Phase current sensing confirmed working during motor run
+* [x] Motor control via `oic write ampnom` / `oic write fslipspnt` functional
+* [x] CAN-based debug logging — `canlogger.cpp/h` sends ASCII text over CAN ID 0x7FF in 8-byte null-terminated frames; replaces CIO printf, eliminating JTAG dependency and DINT/EINT interrupt blocking; `tools/can_logger.py` receives and displays messages in real time
+* [x] Motor speed feedback — `Encoder::GetSpeed()` converts resolver frequency to RPM; `oic read speed` returns RPM confirmed working during motor spin
+* [x] PMIC watchdog fix — startup sequence reordered so `parm_load()` completes before `PowerWatchdog::Init()` starts the 100 ms window watchdog, preventing timeout during EEPROM load
 
 ### In Progress
-* [ ] PWM buffer (74245) enable — controlled by TLF35584 SS2 (not HVIL); under investigation
-* [ ] Vehicle control / CAN throttle integration — planned after PWM buffer
+* [ ] Motor tuning — V/Hz curve optimisation for FDU induction motor (boost, fweakstrt, slip parameters)
+* [ ] CAN bus reliability — cable quality matters; use twisted/shielded CAN cable and verify 120 Ω termination at both ends of the bus
+* [ ] Inverter heating under load — deadtime and switching loss investigation needed at higher power levels
+* [ ] Vehicle control loop — throttle and direction via CAN for in-vehicle use
 
 ### Not Yet Started
 * [ ] CAN firmware upgrade over openinverter CAN protocol
-* [ ] Extended hardware validation with motor running under load
+* [ ] HVIL software integration (fault detection, safe-state on loop open)
+* [ ] Extended hardware validation with motor running under sustained load
 * [ ] Front drive unit (SINE/induction) hardware validation under load
 * [ ] Vehicle integration testing
+
+## Tools
+
+### CAN Debug Logger (`tools/can_logger.py`)
+
+A Python script that listens for debug messages from the firmware on CAN ID `0x7FF` and prints them to stdout in real time. The firmware sends ASCII text as 8-byte null-padded CAN frames; the script reassembles and displays them.
+
+**Requirements:**
+```
+pip install python-can
+```
+
+**Usage (PCAN USB, defaults):**
+```
+python tools/can_logger.py
+```
+
+**Options:**
+```
+python tools/can_logger.py --interface pcan --channel PCAN_USBBUS1 --bitrate 500000
+```
+
+**SocketCAN (Linux / Raspberry Pi):**
+```
+python tools/can_logger.py --interface socketcan --channel can0
+```
+
+The script opens the adapter in normal (active) mode so the PCAN hardware sends CAN ACK bits — required for the MCU's transmit sequencing. The PEAK driver on Windows allows multiple applications (e.g. `oic` and `can_logger.py`) to share the same physical adapter simultaneously; both will receive all frames.
+
+**Debug output** is enabled unconditionally in the firmware's main loop (every 500 ms) and includes: gate driver status, PMIC status registers, DC link voltage, phase currents, resolver angle, HVIL current, all 6 temperature channels, and CPU load. Compile with `-DUSE_CIO_DEBUG` to redirect output to CIO printf over JTAG instead.
 
 ## HVIL Wiring
 

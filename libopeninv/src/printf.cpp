@@ -237,3 +237,8 @@ int fprintf(IPutChar* put, const char *format, ...)
 
    return print( put, format, args );
 }
+
+int vfprintf(IPutChar* put, const char *format, va_list args)
+{
+   return print( put, format, args );
+}

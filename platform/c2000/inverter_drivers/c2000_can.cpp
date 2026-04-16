@@ -134,6 +134,25 @@ void C2000Can::Send(uint32_t canId, uint32_t data[2], uint8_t len)
    bool extended = (canId & CAN_FORCE_EXTENDED) != 0U;
    uint32_t rawId = canId & ~CAN_FORCE_EXTENDED;
 
+   // CAN_sendMessage() writes IF1CMD which sets IF1CMD_BUSY and starts the
+   // IF1→mailbox copy. TXRQST is only set in the mailbox register AFTER that
+   // copy completes. Reading TXRQST before IF1 is idle gives a false zero so
+   // we would proceed straight into CAN_setupMessageObject(), overwriting the
+   // mailbox while the previous frame is still being set up.
+   // Step 1: wait for the IF1→mailbox copy to finish.
+   while (HWREG(base + CAN_O_IF1CMD) & CAN_IF1CMD_BUSY)
+       ;
+   // Step 2: wait for transmission to complete, with a timeout so we never
+   // hang if no node is present to ACK (e.g. bus-off or listen-only sniffer).
+   // At 500 kbps one frame takes ~220 us; 100 000 iterations at 200 MHz is
+   // well over 2 ms — more than enough for a worst-case retransmit attempt.
+   {
+       uint32_t timeout = 100000U;
+       while ((CAN_getTxRequests(base) & (1UL << (TX_MSG_OBJ_ID - 1U))) &&
+              timeout > 0U)
+           timeout--;
+   }
+
    CAN_setupMessageObject(base, TX_MSG_OBJ_ID, rawId,
                           extended ? CAN_MSG_FRAME_EXT : CAN_MSG_FRAME_STD,
                           CAN_MSG_OBJ_TYPE_TX,
