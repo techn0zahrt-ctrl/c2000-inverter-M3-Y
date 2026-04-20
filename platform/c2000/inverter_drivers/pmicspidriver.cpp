@@ -120,5 +120,43 @@ bool PmicSpiDriver::ReadDataAfterWrite()
 
 uint16_t PmicSpiDriver::TransferData(uint16_t data)
 {
-    return SPI_pollingNonFIFOTransaction(m_base, 16U, data);
+    // Timeout for each blocking loop. At 200 MHz, 50 000 iterations is
+    // ~250 µs — roughly 37× the time needed for one 16-bit frame at 2.4 MHz
+    // (~6.7 µs). If either poll times out the SPI bus is stuck; reset the
+    // peripheral and return 0xFFFF so callers see a transfer failure.
+    const uint32_t TIMEOUT = 50000U;
+    uint32_t       timeout;
+
+    SPI_setcharLength(m_base, 16U);
+
+    // Wait for the TX buffer to empty (BUFFULL_FLAG = buffer is full → wait)
+    timeout = TIMEOUT;
+    while ((HWREGH(m_base + SPI_O_STS) & SPI_STS_BUFFULL_FLAG) != 0U)
+    {
+        if (--timeout == 0U)
+        {
+            // SPI TX stuck — reset the module to clear internal state
+            SPI_disableModule(m_base);
+            SPI_enableModule(m_base);
+            return 0xFFFFU;
+        }
+    }
+
+    // Transmit (data must be left-aligned for 16-bit transfer)
+    HWREGH(m_base + SPI_O_TXBUF) = data;
+
+    // Wait for RX data ready (INT_FLAG = transfer complete, data in RXBUF)
+    timeout = TIMEOUT;
+    while ((HWREGH(m_base + SPI_O_STS) & SPI_STS_INT_FLAG) == 0U)
+    {
+        if (--timeout == 0U)
+        {
+            // SPI RX stuck — reset the module
+            SPI_disableModule(m_base);
+            SPI_enableModule(m_base);
+            return 0xFFFFU;
+        }
+    }
+
+    return HWREGH(m_base + SPI_O_RXBUF);
 }

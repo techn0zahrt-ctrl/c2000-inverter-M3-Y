@@ -44,7 +44,7 @@
     PARAM_ENTRY(CAT_MOTOR,   fweak,       "Hz",      0,      1000,   90,     2   ) \
     PARAM_ENTRY(CAT_MOTOR,   fweakstrt,   "Hz",      0,      1000,   400,    134 ) \
     PARAM_ENTRY(CAT_MOTOR,   fconst,      "Hz",      0,      1000,   180,    99  ) \
-    PARAM_ENTRY(CAT_MOTOR,   udcnom,      "V",       0,      1000,   0,      78  ) \
+    PARAM_ENTRY(CAT_MOTOR,   udcnom,      "V",       0,      1000,   120,    78  ) \
     PARAM_ENTRY(CAT_MOTOR,   fslipmin,    "Hz",      0.3,    10,     1,      37  ) \
     PARAM_ENTRY(CAT_MOTOR,   fslipmax,    "Hz",      0.3,    10,     3,      33  ) \
     PARAM_ENTRY(CAT_MOTOR,   fslipconstmax,"Hz",     0,      10,     5,      100 )
@@ -62,12 +62,12 @@
     PARAM_ENTRY(CAT_INVERTER,pwmfrq,      PWMFRQS,   0,      2,      1,      13  ) \
     PARAM_ENTRY(CAT_INVERTER,pwmpol,      PWMPOLS,   0,      1,      0,      52  ) \
     PARAM_ENTRY(CAT_INVERTER,deadtime,    "ns",      0,      4000,   875,    14  ) \
-    PARAM_ENTRY(CAT_INVERTER,ocurlim,     "A",       -65536L, 65536L,100,    22  ) \
+    PARAM_ENTRY(CAT_INVERTER,ocurlim,     "A",       -65536L, 65536L,20,     22  ) \
     PARAM_ENTRY(CAT_INVERTER,il1gain,     "dig/A",   -100,   100,    4.7,    27  ) \
     PARAM_ENTRY(CAT_INVERTER,il2gain,     "dig/A",   -100,   100,    4.7,    28  ) \
     PARAM_ENTRY(CAT_INVERTER,udcgain,     "dig/V",   0,      4095L,  8.5625,  29  ) \
     PARAM_ENTRY(CAT_INVERTER,udcofs,      "dig",     0,      4095L,  0,      77  ) \
-    PARAM_ENTRY(CAT_INVERTER,udclim,      "V",       0,      1000,   540,    48  ) \
+    PARAM_ENTRY(CAT_INVERTER,udclim,      "V",       0,      1000,   450,    48  ) \
     PARAM_ENTRY(CAT_INVERTER,snshs,       SNS_HS,    0,      7,      0,      45  )
 
 #define INVERTER_PARAMETERS_FOC \
@@ -76,8 +76,8 @@
 #define DERATE_PARAMETERS_COMMON \
     PARAM_ENTRY(CAT_DERATE,  bmslimhigh,  "%",       0,      100,    50,     55  ) \
     PARAM_ENTRY(CAT_DERATE,  bmslimlow,   "%",       -100,   0,      -1,     56  ) \
-    PARAM_ENTRY(CAT_DERATE,  udcmin,      "V",       0,      1000,   450,    42  ) \
-    PARAM_ENTRY(CAT_DERATE,  udcmax,      "V",       0,      1000,   520,    43  ) \
+    PARAM_ENTRY(CAT_DERATE,  udcmin,      "V",       0,      1000,   60,     42  ) \
+    PARAM_ENTRY(CAT_DERATE,  udcmax,      "V",       0,      1000,   420,    43  ) \
     PARAM_ENTRY(CAT_DERATE,  idcmax,      "A",       0,      5000L,  5000L,   96  ) \
     PARAM_ENTRY(CAT_DERATE,  idcmin,      "A",       -5000L, 0,     -5000L,   98  ) \
     PARAM_ENTRY(CAT_DERATE,  idckp,       "dig",     0.1,    20,    2,       130 ) \
@@ -140,7 +140,7 @@
     PARAM_ENTRY(CAT_AUTOM,   speedkp,     "",        0,      100,    0.25,   53  ) \
     PARAM_ENTRY(CAT_AUTOM,   speedflt,    "",        0,      16,     5,      57  ) \
     PARAM_ENTRY(CAT_AUTOM,   cruisemode,  BTNSWITCH, 0,      2,      0,      62  ) \
-    PARAM_ENTRY(CAT_CONTACT, udcsw,       "V",       0,      1000,   330,    20  ) \
+    PARAM_ENTRY(CAT_CONTACT, udcsw,       "V",       0,      1000,   60,     20  ) \
     PARAM_ENTRY(CAT_CONTACT, udcswbuck,   "V",       0,      1000,   540,    80  ) \
     PARAM_ENTRY(CAT_CONTACT, tripmode,    TRIPMODES, 0,      3,      0,      86  ) \
     PARAM_ENTRY(CAT_CONTACT, bootprec,    ONOFF,     0,      1,      0,      135 ) \

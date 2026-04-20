@@ -390,12 +390,14 @@ void main(void)
 
             // Gate driver health
             PRINTF("Gate Drive: %s\n", GateDriver::IsFaulty() ? "FAULT" : "OK");
+            /*
             uint16_t gd_status1[6], gd_status2[6], gd_status3[6];
             GateDriver::GetStatus(gd_status1, gd_status2, gd_status3);
             PRINTF("GD0: S1=0x%x S2=0x%x S3=0x%x\n", gd_status1[0], gd_status2[0], gd_status3[0]);
             PRINTF("GD1: S1=0x%x S2=0x%x S3=0x%x\n", gd_status1[1], gd_status2[1], gd_status3[1]);
             PRINTF("GD2: S1=0x%x S2=0x%x S3=0x%x\n", gd_status1[2], gd_status2[2], gd_status3[2]);
             PRINTF("PWM cycles: %d\n", currentLoad - lastLoad);
+            */
 
             // PMIC status registers
             {
@@ -418,12 +420,11 @@ void main(void)
             MotorVoltage::SetWeakeningFrq(Param::GetFloat(Param::fweakstrt));
             char udcStr[16];
             PRINTF("UDC: %s V\n", ftoa(udcStr, Param::GetFloat(Param::udc), 1));
-
             // Phase currents
-            PRINTF("Il1: %d A  Il2: %d A\n",
-                (int16_t)Param::Get(Param::il1),
-                (int16_t)Param::Get(Param::il2));
-
+            char il1str[12], il2str[12];
+            PRINTF("Il1: %s A  Il2: %s A\n",
+                ftoa(il1str, FP_TOFLOAT(Param::Get(Param::il1)), 2),
+                ftoa(il2str, FP_TOFLOAT(Param::Get(Param::il2)), 2));
             // Resolver — raw, offset-corrected, and calculated angle
             {
                 int16_t sinRaw = (int16_t)MotorAnalogCapture::ResolverSine();
@@ -448,6 +449,7 @@ void main(void)
                 float tmphsMax = -100.0f;
                 float tmpm = 0.0f;
                 char tempStr[16];
+                PRINTF("Temp ");
                 for (uint8_t ch = 0; ch < 6; ch++)
                 {
                     MotorAnalogCapture::SetTempMuxChannel(ch);
@@ -465,15 +467,17 @@ void main(void)
                         if (ch >= 2 && temp > tmphsMax)
                             tmphsMax = temp;
                     }
-                    PRINTF("Temp ch%d: raw=%d %s C\n",
+                    PRINTF("ch%d: raw=%d %s C ",
                         (int)ch, (int)raw, ftoa(tempStr, temp, 1));
                 }
+                PRINTF("\n");
                 if (tmphsMax > -100.0f)
                     Param::SetFloat(Param::tmphs, tmphsMax);
                 Param::SetFloat(Param::tmpm, tmpm);
                 char tmphsStr[16], tmpmStr[16];
                 PRINTF("tmphs=%s C  tmpm=%s C\n",
                     ftoa(tmphsStr, tmphsMax, 1), ftoa(tmpmStr, tmpm, 1));
+                PRINTF("\n");
             }
 
             lastLoad = currentLoad;
