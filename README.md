@@ -87,6 +87,7 @@ Active development is on the `portable-cpp` branch of the fork
 * [x] Phase current sensing confirmed working during motor run
 * [x] Motor control via `oic write ampnom` / `oic write fslipspnt` functional
 * [x] CAN-based debug logging — `canlogger.cpp/h` sends ASCII text over CAN ID 0x7FF in 8-byte null-terminated frames; replaces CIO printf, eliminating JTAG dependency and DINT/EINT interrupt blocking; `tools/can_logger.py` receives and displays messages in real time
+* [x] On-demand CAN logging — Python client sends start/stop/interval commands to ID 0x7FE; firmware only transmits when client is connected; auto-stops after 30 s keepalive timeout; eliminates CAN ACK blocking when no client is listening
 * [x] Motor speed feedback — `Encoder::GetSpeed()` converts resolver frequency to RPM; `oic read speed` returns RPM confirmed working during motor spin
 * [x] PMIC watchdog fix — startup sequence reordered so `parm_load()` completes before `PowerWatchdog::Init()` starts the 100 ms window watchdog, preventing timeout during EEPROM load
 
@@ -95,6 +96,7 @@ Active development is on the `portable-cpp` branch of the fork
 * [ ] CAN bus reliability — cable quality matters; use twisted/shielded CAN cable and verify 120 Ω termination at both ends of the bus
 * [ ] Inverter heating under load — deadtime and switching loss investigation needed at higher power levels
 * [ ] Vehicle control loop — throttle and direction via CAN for in-vehicle use
+* [ ] Battery testing — higher current testing planned with 2× 13S LiPo in series (~96 V, high current)
 
 ### Not Yet Started
 * [ ] CAN firmware upgrade over openinverter CAN protocol
@@ -107,21 +109,27 @@ Active development is on the `portable-cpp` branch of the fork
 
 ### CAN Debug Logger (`tools/can_logger.py`)
 
-A Python script that listens for debug messages from the firmware on CAN ID `0x7FF` and prints them to stdout in real time. The firmware sends ASCII text as 8-byte null-padded CAN frames; the script reassembles and displays them.
+A Python script that controls and receives debug messages from the firmware. Logging is **on-demand** — the firmware only transmits when this script is running. The script sends a start command on launch, sends keepalive commands every 5 s to maintain the connection, and sends a stop command on exit. If the script exits or loses connection, the firmware automatically stops logging after 30 s.
 
 **Requirements:**
 ```
 pip install python-can
 ```
 
-**Usage (PCAN USB, defaults):**
+**Usage (PCAN USB, defaults — 2 s interval):**
 ```
 python tools/can_logger.py
 ```
 
-**Options:**
+**Faster interval (500 ms):**
 ```
-python tools/can_logger.py --interface pcan --channel PCAN_USBBUS1 --bitrate 500000
+python tools/can_logger.py --interval 500
+```
+
+**All options:**
+```
+python tools/can_logger.py --interface pcan --channel PCAN_USBBUS1 --bitrate 500000 --interval 2000
+python tools/can_logger.py --no-keepalive   # send start once, no periodic keepalive
 ```
 
 **SocketCAN (Linux / Raspberry Pi):**
@@ -131,7 +139,9 @@ python tools/can_logger.py --interface socketcan --channel can0
 
 The script opens the adapter in normal (active) mode so the PCAN hardware sends CAN ACK bits — required for the MCU's transmit sequencing. The PEAK driver on Windows allows multiple applications (e.g. `oic` and `can_logger.py`) to share the same physical adapter simultaneously; both will receive all frames.
 
-**Debug output** is enabled unconditionally in the firmware's main loop (every 500 ms) and includes: gate driver status, PMIC status registers, DC link voltage, phase currents, resolver angle, HVIL current, all 6 temperature channels, and CPU load. Compile with `-DUSE_CIO_DEBUG` to redirect output to CIO printf over JTAG instead.
+**Control protocol** (ID `0x7FE`): byte 0 = command (`0x01` start, `0x00` stop), byte 1 = interval in 100 ms units. **Log channel** (ID `0x7FF`): ASCII text in 8-byte null-padded frames; a null byte signals end-of-message.
+
+**Debug output** includes: gate driver status, PMIC status registers, DC link voltage, phase currents, resolver angle, HVIL current, all 6 temperature channels, and CPU load. Compile with `-DUSE_CIO_DEBUG` to redirect output to CIO printf over JTAG instead.
 
 ## HVIL Wiring
 

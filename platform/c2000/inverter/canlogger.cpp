@@ -22,18 +22,115 @@
 #include <stdint.h>
 #include "printf.h"
 
-// CAN ID used exclusively for debug text frames
-static const uint32_t CAN_LOG_ID = 0x7FFU;
+// ---------------------------------------------------------------------------
+// Static state
+// ---------------------------------------------------------------------------
 
-// Maximum formatted message length (including null terminator)
-static const int LOG_BUF_SIZE = 128;
-
-CanHardware* CanLogger::s_can = 0;
+CanHardware* CanLogger::s_can             = 0;
+bool         CanLogger::s_enabled         = false;
+uint32_t     CanLogger::s_intervalMs      = CanLogger::DEFAULT_INTERVAL_MS;
+uint32_t     CanLogger::s_intervalAccumMs = 0U;
+uint32_t     CanLogger::s_keepaliveMs     = 0U;
 
 // ---------------------------------------------------------------------------
-// IPutChar adapter: collects formatted characters into a fixed-size buffer.
-// Used by Printf to format via libopeninv's fprintf without needing vsprintf.
+// CAN RX callback — dispatches 0x7FE control frames to HandleControlFrame
 // ---------------------------------------------------------------------------
+
+class CanLoggerCallback : public CanCallback
+{
+public:
+    void HandleRx(uint32_t canId, uint32_t data[2], uint8_t dlc) override
+    {
+        CanLogger::HandleControlFrame(canId, data, dlc);
+    }
+    void HandleClear() override {}
+};
+
+static CanLoggerCallback s_callback;
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
+void CanLogger::Init(CanHardware* can)
+{
+    s_can = can;
+    can->RegisterUserMessage(CAN_CTRL_ID);
+    can->AddCallback(&s_callback);
+}
+
+/**
+ * Advance timers by ms milliseconds.
+ *
+ * Keepalive: if no start command has been received for 30 s, disable logging.
+ * Interval:  return true (time to dump) when the requested interval elapses.
+ * The first call after a start command always returns true so the client sees
+ * output immediately without waiting a full interval.
+ */
+bool CanLogger::Tick(uint32_t ms)
+{
+    if (!s_enabled)
+        return false;
+
+    s_keepaliveMs += ms;
+    if (s_keepaliveMs >= KEEPALIVE_TIMEOUT_MS)
+    {
+        s_enabled = false;
+        return false;
+    }
+
+    s_intervalAccumMs += ms;
+    if (s_intervalAccumMs >= s_intervalMs)
+    {
+        s_intervalAccumMs = 0U;
+        return true;
+    }
+    return false;
+}
+
+/**
+ * Handle a control frame on ID 0x7FE.
+ *   data[0] bits [7:0]  = command byte (0x01 start, 0x00 stop)
+ *   data[0] bits [15:8] = interval in 100 ms units (0 → use default 2 s)
+ */
+void CanLogger::HandleControlFrame(uint32_t canId, uint32_t data[2],
+                                   uint8_t /*dlc*/)
+{
+    if (canId != CAN_CTRL_ID)
+        return;
+
+    uint8_t cmd      = (uint8_t)(data[0] & 0xFFU);
+    uint8_t interval = (uint8_t)((data[0] >> 8) & 0xFFU);
+
+    if (cmd == 0x01U)
+    {
+        s_keepaliveMs = 0U;
+        uint32_t newInterval = (interval > 0U)
+                                   ? (uint32_t)interval * 100U
+                                   : DEFAULT_INTERVAL_MS;
+        if (!s_enabled)
+        {
+            // Fresh start: trigger immediate first dump and apply interval
+            s_enabled         = true;
+            s_intervalMs      = newInterval;
+            s_intervalAccumMs = s_intervalMs;
+        }
+        else if (newInterval != s_intervalMs)
+        {
+            // Interval changed mid-session: apply without disrupting timing
+            s_intervalMs = newInterval;
+        }
+    }
+    else if (cmd == 0x00U)
+    {
+        s_enabled = false;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// IPutChar adapter for Printf
+// ---------------------------------------------------------------------------
+
 class BufferPutChar : public IPutChar
 {
 public:
@@ -60,28 +157,21 @@ private:
 
 // ---------------------------------------------------------------------------
 
-void CanLogger::Init(CanHardware* can)
-{
-    s_can = can;
-}
-
 /**
- * Send a null-terminated string as a sequence of 8-byte CAN frames on
- * ID 0x7FF. Each frame is zero-padded to 8 bytes. A null byte in the
- * payload signals end-of-message to the receiver.
+ * Send a null-terminated string as 8-byte CAN frames on ID 0x7FF.
+ * Silently dropped when logging is disabled.
  *
- * On C2000 (non-EABI) uint8_t is 16-bit, so a uint8_t[8] array is twice
- * as large as C2000Can::Send expects when cast to uint32_t*. Avoid that
- * overload entirely by packing chars directly into uint32_t[2] here.
+ * On C2000 (EABI) uint8_t is 8-bit but the CanHardware uint8_t[] overload
+ * casts to uint32_t* which only reads data[0..1] (covers 4 chars, not 8).
+ * Pack directly into uint32_t[2] to avoid that truncation.
  */
 void CanLogger::Print(const char* msg)
 {
-    if (!s_can || !msg)
+    if (!s_can || !msg || !s_enabled)
         return;
 
     while (*msg)
     {
-        // Pack up to 8 chars into two 32-bit words (4 chars each), null-padded.
         uint32_t data[2] = {0U, 0U};
 
         int i = 0;
@@ -102,11 +192,15 @@ void CanLogger::Print(const char* msg)
 }
 
 /**
- * Format a printf-style message into a 128-byte buffer via libopeninv's
- * vfprintf (with a BufferPutChar adapter), then send via Print().
+ * Format a printf-style message (max 128 chars) then send via Print().
+ * Silently dropped when logging is disabled.
  */
 void CanLogger::Printf(const char* fmt, ...)
 {
+    if (!s_enabled)
+        return;
+
+    static const int LOG_BUF_SIZE = 128;
     char buf[LOG_BUF_SIZE];
     BufferPutChar sink(buf, LOG_BUF_SIZE);
 

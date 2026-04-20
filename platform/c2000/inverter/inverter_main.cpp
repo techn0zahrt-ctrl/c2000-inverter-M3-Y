@@ -354,14 +354,13 @@ void main(void)
     //
     int blinkState = 0;
     int32_t lastLoad = PwmGeneration::GetCpuLoad();
-    static int loopCount = 0;
+    int loopCount = 0;
     while (true)
     {
         canSdo->TriggerTimeout(10);
 
         if (canSdo->GetPrintRequest() >= 0)
         {
-            loopCount = 0;
             PrintParamsJson(canSdo, canMap);
         }
         CanSdo::SdoFrame* sdoFrame = canSdo->GetPendingUserspaceSdo();
@@ -379,13 +378,12 @@ void main(void)
 
         DEVICE_DELAY_US(5000);
 
-        //char angleStr[16];
-        //PRINTF("Angle: %s\n", ftoa(angleStr, Param::GetFloat(Param::angle), 1));
-
         loopCount++;
-        if (loopCount >= 400)
+
+        // Demand-driven debug dump — fires only when the Python client has
+        // enabled logging via CAN ID 0x7FE and the requested interval elapses.
+        if (CanLogger::Tick(5))
         {
-            loopCount = 0;
             int32_t currentLoad = PwmGeneration::GetCpuLoad();
 
             // Gate driver health
