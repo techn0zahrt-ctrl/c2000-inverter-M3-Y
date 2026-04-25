@@ -355,6 +355,9 @@ void main(void)
     int blinkState = 0;
     int32_t lastLoad = PwmGeneration::GetCpuLoad();
     int loopCount = 0;
+    uint32_t OnTime = 0;
+    int DropNormal = 0;
+    uint32_t DropNormalTime = 0;
     while (true)
     {
         canSdo->TriggerTimeout(10);
@@ -379,6 +382,7 @@ void main(void)
         DEVICE_DELAY_US(5000);
 
         loopCount++;
+        OnTime++;
 
         // Demand-driven debug dump — fires only when the Python client has
         // enabled logging via CAN ID 0x7FE and the requested interval elapses.
@@ -386,6 +390,8 @@ void main(void)
         {
             int32_t currentLoad = PwmGeneration::GetCpuLoad();
 
+            //On time
+            PRINTF("On Time: %d.%d s\n", (int)(OnTime/200), (int)((OnTime%200)*5));
             // Gate driver health
             PRINTF("Gate Drive: %s\n", GateDriver::IsFaulty() ? "FAULT" : "OK");
             /*
@@ -398,20 +404,26 @@ void main(void)
             */
 
             // PMIC status registers
+            uint16_t devstat = 0, syssf = 0, monsf0 = 0, monsf1 = 0, monsf2 = 0;
+            if (PowerWatchdog::ReadStatusRegisters(devstat, syssf, monsf0, monsf1, monsf2) ==
+                PowerWatchdog::OK)
             {
-                uint16_t devstat = 0, syssf = 0, monsf0 = 0, monsf1 = 0, monsf2 = 0;
-                if (PowerWatchdog::ReadStatusRegisters(devstat, syssf, monsf0, monsf1, monsf2) ==
-                    PowerWatchdog::OK)
-                {
-                    PRINTF("PMIC: DEVSTAT=0x%02x SYSSF=0x%02x MONSF0=0x%02x MONSF1=0x%02x MONSF2=0x%02x\n",
-                        (unsigned)devstat, (unsigned)syssf,
-                        (unsigned)monsf0, (unsigned)monsf1, (unsigned)monsf2);
-                }
-                else
-                {
-                    PRINTF("PMIC: status read failed\n");
-                }
+                PRINTF("PMIC: DEVSTAT=0x%02x SYSSF=0x%02x MONSF0=0x%02x MONSF1=0x%02x MONSF2=0x%02x\n",
+                    (unsigned)devstat, (unsigned)syssf,
+                    (unsigned)monsf0, (unsigned)monsf1, (unsigned)monsf2);
             }
+            else
+            {
+                PRINTF("PMIC: status read failed\n");
+            }
+            if (DropNormal == 0 && devstat == 0xf9)
+            {
+                DropNormal = 1;
+                DropNormalTime = OnTime;
+            }
+            if (DropNormal == 1)
+                PRINTF("Normal Dropped: %d.%d s\n", (int)(DropNormalTime/200), (int)((DropNormalTime%200)*5));
+
 
             // DC link voltage (also updated in ISR; refresh boost/weakening here)
             MotorVoltage::SetBoost(Param::GetInt(Param::boost));
