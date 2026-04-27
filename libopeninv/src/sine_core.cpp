@@ -108,14 +108,14 @@ uint16_t SineCore::Atan2(int32_t x, int32_t y)
    }
    if (x <= 0)
    {
-      int temp = x;
+      int32_t temp = x;
       x = y;
       y = -temp;
       phi += 2;
    }
    if (x <= y)
    {
-      int temp = y - x;
+      int32_t temp = y - x;
       x = x + y;
       y = temp;
       phi += 1;

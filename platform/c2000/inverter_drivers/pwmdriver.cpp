@@ -579,15 +579,14 @@ uint16_t PwmDriver::TimerSetup(
     // counting up to the configured value.
     // The MotorAnalogCapture class is responsible for configuring all ADC
     // channels it requires.
-    // We scale the ADC trigger event prescale to allow operation of unoptimised
-    // code.
+    // Trigger ADC on every PWM cycle so the ISR fires at the carrier frequency.
     //
     MotorAnalogCapture::Init();
 
     const uint32_t motorAdcPwm = EPWM4_BASE;
     EPWM_disableADCTrigger(motorAdcPwm, EPWM_SOC_A);
     EPWM_setADCTriggerSource(motorAdcPwm, EPWM_SOC_A, EPWM_SOC_TBCTR_U_CMPA);
-    EPWM_setADCTriggerEventPrescale(motorAdcPwm, EPWM_SOC_A, 15U);
+    EPWM_setADCTriggerEventPrescale(motorAdcPwm, EPWM_SOC_A, 1U);
 
     MotorAnalogCapture::ConfigureSoc(ADC_TRIGGER_EPWM4_SOCA);
 
