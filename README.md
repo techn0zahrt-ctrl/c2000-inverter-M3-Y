@@ -90,9 +90,11 @@ Active development is on the `portable-cpp` branch of the fork
 * [x] On-demand CAN logging — Python client sends start/stop/interval commands to ID 0x7FE; firmware only transmits when client is connected; auto-stops after 30 s keepalive timeout; eliminates CAN ACK blocking when no client is listening
 * [x] Motor speed feedback — `Encoder::GetSpeed()` converts resolver frequency to RPM; `oic read speed` returns RPM confirmed working during motor spin
 * [x] PMIC watchdog fix — startup sequence reordered so `parm_load()` completes before `PowerWatchdog::Init()` starts the 100 ms window watchdog, preventing timeout during EEPROM load
+* [x] ADC trigger prescaler bug fixed — `EPWM_setADCTriggerEventPrescale` was set to `15U` causing the PWM ISR to fire at 813 Hz instead of 12.2 kHz; this produced a 15× slip frequency error requiring ~150 Hz commanded slip to achieve what should be 10 Hz, with massive reactive current and inverter overheating as symptoms
+* [x] C28x word-size bug fixed in `SineCore::Atan2` — `int temp` changed to `int32_t temp` (two occurrences); on C28x `int` is 16-bit so resolver coordinates were silently truncated in the closed-loop angle calculation; the bug was hidden on STM32 where `int` is 32-bit
 
 ### In Progress
-* [ ] Motor tuning — V/Hz curve optimisation for FDU induction motor (boost, fweakstrt, slip parameters)
+* [ ] Motor tuning with corrected PWM ISR rate — first hardware testing with fixed firmware pending
 * [ ] CAN bus reliability — cable quality matters; use twisted/shielded CAN cable and verify 120 Ω termination at both ends of the bus
 * [ ] Inverter heating under load — deadtime and switching loss investigation needed at higher power levels
 * [ ] Vehicle control loop — throttle and direction via CAN for in-vehicle use

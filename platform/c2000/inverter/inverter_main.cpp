@@ -261,6 +261,10 @@ void main(void)
     // Load saved parameters from SPI EEPROM (slow — must be before watchdog)
     EEPROM::InitSPI();
     int loadResult = parm_load();
+    Param::Set(Param::ampnom, 0);
+    Param::Set(Param::fslipspnt, 0);
+    PwmGeneration::SetAmpnom(0);
+    PwmGeneration::SetFslip(0);
 
     // Initialise scheduler and PMIC watchdog now that slow EEPROM reads are
     // done so the 100ms window watchdog doesn't expire during parm_load()
@@ -289,7 +293,7 @@ void main(void)
 
     // We need the pole pair ratio set to correctly calculate the rotation
     // frequency
-    PwmGeneration::SetPolePairRatio(1);
+    PwmGeneration::SetPolePairRatio(Param::GetInt(Param::polepairs) / Param::GetInt(Param::respolepairs));
 
     // Ensure the system thinks we should be going forwards
     Param::SetInt(Param::dir, 1);
@@ -375,7 +379,6 @@ void main(void)
 
         canMap->SendAll();
 
-        // Feed params into PWM generation for manual control
         PwmGeneration::SetAmpnom(Param::Get(Param::ampnom));
         PwmGeneration::SetFslip(Param::Get(Param::fslipspnt));
 
