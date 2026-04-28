@@ -23,15 +23,13 @@
  * TeslaM3OilPump can hold a LinBus* and receive a C2000Lin instance.
  *
  * LIN break generation:
- *   SCI does not have a dedicated break-send bit. The break is generated
- *   by temporarily lowering the SCIA baud rate to 9600 (half of 19200)
- *   and transmitting 0x00.  At 9600 baud one character spans ~20 nominal
- *   bit periods, satisfying the LIN 2.x requirement of >= 13 bit periods.
- *   The baud rate is restored to 19200 before the sync + PID bytes are sent.
- *
- *   NOTE: The user-specified rate of ~1200 baud would produce an 8.3 ms break,
- *   which would not leave time for the slave response to arrive within the
- *   10 ms tick window.  Use 9600 baud (or tune BREAK_BAUD below as needed).
+ *   SCI has no hardware break-send bit.  Baud-rate tricks are unreliable with
+ *   FIFO enabled because TXFFST (what SCI_isTransmitterBusy checks) clears the
+ *   instant the byte enters the shift register, not when it finishes transmitting.
+ *   Fix: disable FIFO, drop to 9600 baud, transmit 0x00 (produces a 10-bit
+ *   dominant field = 1.04 ms > 13 bits at 19200), poll TXEMPTY (SCICTL2 bit 6)
+ *   which correctly reflects both the TX buffer and shift register when FIFO is
+ *   off, then restore 19200 baud and re-enable the FIFO.
  *
  * Receive handling:
  *   After a read request the LIN transceiver reflects the sync (0x55) and
@@ -50,11 +48,18 @@
 class C2000Lin : public LinBus
 {
 public:
-   /** Initialise SCIA hardware (GPIO48 TX / GPIO49 RX, 19200 8N1). */
+   /** Constructor — does not touch hardware (see HwInit). */
    C2000Lin();
 
    /**
-    * No-op: SCIA is configured in the constructor.
+    * Configure SCIA hardware (GPIO48 TX / GPIO49 RX, 19200 8N1).
+    * Must be called after Device_init() in main() since Device_init()
+    * resets all peripherals.
+    */
+   void HwInit();
+
+   /**
+    * No-op: SCIA is configured via HwInit().
     * Called by TeslaM3OilPump::SetLinInterface; usart and baudrate are ignored.
     */
    void Init(uint32_t usart, int baudrate) override;
@@ -77,8 +82,14 @@ public:
    /** Return pointer to the last successfully received payload bytes. */
    uint8_t* GetReceivedBytes() override { return responseData; }
 
+   /** Return rxCount captured after the last HasReceived() call (-1 = never called). */
+   int GetLastRxCount() const { return lastRxCount; }
+
+   /** Return pointer to raw receive buffer (up to 14 bytes). */
+   const uint8_t* GetRawBuffer() const { return rawBuffer; }
+
 private:
-   /** Lower baud to 9600, send 0x00 (break), restore 19200. */
+   /** Send LIN break: disable FIFO, 9600 baud 0x00, poll TXEMPTY, restore 19200 + FIFO. */
    void SendBreak();
 
    /** Reset SCIA RX FIFO and clear the local receive buffer. */
@@ -91,6 +102,7 @@ private:
     * Capacity: break-echo(1) + sync(1) + PID(1) + 8 data + checksum(1) + margin */
    uint8_t rawBuffer[14];
    int     rxCount;
+   int     lastRxCount;
 
    /* Extracted payload from the last successfully validated response. */
    uint8_t responseData[8];

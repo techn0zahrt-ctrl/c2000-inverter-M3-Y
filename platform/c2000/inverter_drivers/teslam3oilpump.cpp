@@ -39,8 +39,14 @@ static const uint8_t SpeedRequestLen = 2;
 static const uint8_t FlowPressureTempStatusPID = 0x2A;
 static const uint8_t FlowPressureTempStatusLen = 8;
 
-static const uint8_t VoltageSpeedStatusPID = 0x30;
-static const uint8_t VoltageSpeedStatusLen = 8;
+static const uint8_t MotorSpeedStatusPID = 0x32;
+static const uint8_t MotorSpeedStatusLen = 8;
+
+static const uint8_t VoltageStatusPID = 0x30;
+static const uint8_t VoltageStatusLen = 8;
+
+static const uint8_t ExtraStatusPID = 0x31;
+static const uint8_t ExtraStatusLen = 8;
 
 //! \brief Aim for a 100ms loop duration
 static const uint8_t MaxLoopTicks = 10;
@@ -102,7 +108,15 @@ void TeslaM3OilPump::Ms10Task()
       break;
 
    case 2:
-      lin->Request(VoltageSpeedStatusPID, 0, 0);
+      lin->Request(MotorSpeedStatusPID, 0, 0);
+      break;
+
+   case 3:
+      lin->Request(VoltageStatusPID, 0, 0);
+      break;
+
+   case 4:
+      lin->Request(ExtraStatusPID, 0, 0);
       break;
 
    default:
@@ -148,12 +162,22 @@ void TeslaM3OilPump::ProcessStatusResponse()
 
       ticksSinceLastResponse = 0;
    }
-   else if (lin->HasReceived(VoltageSpeedStatusPID, VoltageSpeedStatusLen))
+   else if (lin->HasReceived(MotorSpeedStatusPID, MotorSpeedStatusLen))
    {
       uint8_t* data = lin->GetReceivedBytes();
 
-      Param::SetFloat(Param::upmp, data[0] * 0.1f); // Oil pump 12V supply Voltage.
-      Param::SetInt(Param::pmprev, (data[5] << 8) | (data[4])); // Oil pump RPM
+      Param::SetInt(Param::pmprev, data[3]); // Motor speed — byte 3, single byte
+      ticksSinceLastResponse = 0;
+   }
+   else if (lin->HasReceived(VoltageStatusPID, VoltageStatusLen))
+   {
+      uint8_t* data = lin->GetReceivedBytes();
+
+      Param::SetFloat(Param::upmp, data[0] * 0.1f); // Supply voltage
+      ticksSinceLastResponse = 0;
+   }
+   else if (lin->HasReceived(ExtraStatusPID, ExtraStatusLen))
+   {
       ticksSinceLastResponse = 0;
    }
 }

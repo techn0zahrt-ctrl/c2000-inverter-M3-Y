@@ -20,18 +20,22 @@
 #include "device.h"
 #include "driverlib.h"
 
-/* Baud rate used to generate the LIN break field.
- * At 9600 baud one character (10 bit periods) spans ~1.04 ms, which equals
- * ~20 nominal bit periods at 19200 baud -- well above the LIN 2.x minimum
- * of 13 nominal bit periods (677 us).  Total frame time (break + sync/PID +
- * 9-byte response) is ~6.8 ms, leaving comfortable margin in a 10 ms tick. */
-#define BREAK_BAUD    9600U
+/* LIN baud rate */
 #define LIN_BAUD      19200U
+/* Half of LIN baud — 0x00 at this rate produces a ~1.04 ms dominant field (>13 bits at 19200) */
+#define BREAK_BAUD    9600U
 
 /* 8-bit, no parity, 1 stop bit */
 #define LIN_SCI_CONFIG (SCI_CONFIG_WLEN_8 | SCI_CONFIG_STOP_ONE)
 
-C2000Lin::C2000Lin() : rxCount(0)
+C2000Lin::C2000Lin() : rxCount(0), lastRxCount(-1)
+{
+   /* Hardware init is deferred to HwInit() so that it runs after
+    * Device_init() in main() — Device_init() resets all peripherals
+    * including SCIA, which would wipe any configuration done here. */
+}
+
+void C2000Lin::HwInit()
 {
    /* Configure GPIO48 as SCIA TX, GPIO49 as SCIA RX */
    GPIO_setPinConfig(GPIO_48_SCITXDA);
@@ -47,6 +51,7 @@ C2000Lin::C2000Lin() : rxCount(0)
    SCI_enableFIFO(SCIA_BASE);
    SCI_resetRxFIFO(SCIA_BASE);
    SCI_resetTxFIFO(SCIA_BASE);
+   SCI_enableModule(SCIA_BASE);
 }
 
 void C2000Lin::Init(uint32_t /*usart*/, int /*baudrate*/)
@@ -58,18 +63,36 @@ void C2000Lin::Init(uint32_t /*usart*/, int /*baudrate*/)
 
 void C2000Lin::SendBreak()
 {
-   /* Lower baud rate and send 0x00 to produce the LIN break field.
-    * The stop bit of 0x00 serves as the break delimiter. */
+   /* Generate LIN break using the baud-rate trick, but with FIFO disabled
+    * so TXEMPTY correctly reflects the shift register state.
+    * With FIFO enabled TXEMPTY is unreliable; TXFFST (what
+    * SCI_isTransmitterBusy checks) clears the instant the byte moves to the
+    * shift register, causing the baud rate to be restored too early.
+    * Disabling FIFO before the break and re-enabling after gives a clean
+    * single-stream transmission analogous to STM32's USART SBK+LINEN path. */
+   SCI_disableFIFO(SCIA_BASE);
+
    SCI_setBaud(SCIA_BASE, DEVICE_LSPCLK_FREQ, BREAK_BAUD);
 
    uint8_t zero = 0U;
    SCI_writeCharArray(SCIA_BASE, &zero, 1U);
 
-   /* Wait for the break character to finish transmitting before
-    * restoring the normal baud rate and sending sync + PID. */
-   while (SCI_isTransmitterBusy(SCIA_BASE)) {}
+   /* Without FIFO, TXEMPTY (SCICTL2 bit 6) correctly indicates both the TX
+    * buffer and shift register are empty — i.e. the full break character has
+    * been transmitted. */
+   while ((HWREGH(SCIA_BASE + SCI_O_CTL2) & SCI_CTL2_TXEMPTY) == 0U) {}
 
    SCI_setBaud(SCIA_BASE, DEVICE_LSPCLK_FREQ, LIN_BAUD);
+
+   SCI_enableFIFO(SCIA_BASE);
+   SCI_resetTxFIFO(SCIA_BASE);
+   SCI_resetRxFIFO(SCIA_BASE);
+   /* Cycle SWRESET to clear SCIRXBUF/RXRDY/BRKDT left by the break echo that
+    * arrived in non-FIFO mode — otherwise the stale state silently blocks the
+    * FIFO receiver from accepting new bytes. SCIFFTX/SCIFFRX and baud registers
+    * are unaffected by SWRESET. */
+   SCI_performSoftwareReset(SCIA_BASE);
+   rxCount = 0;
 }
 
 void C2000Lin::FlushRx()
@@ -132,6 +155,7 @@ bool C2000Lin::HasReceived(uint8_t id, uint8_t requiredLen)
    if (requiredLen > 8U) return false;
 
    CollectRxBytes();
+   lastRxCount = rxCount;
 
    /* Scan for the sync byte (0x55) which anchors the frame in the raw buffer.
     * The LIN transceiver reflects TX bytes back on the RX line, so the

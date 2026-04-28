@@ -56,7 +56,7 @@ Active development is on the `portable-cpp` branch of the fork
 * [x] openinverter compatible CAN support (CanMap, CanSdo, SdoCommands)
 * [x] CAN control of openinverter serial parameters and commands
 * [x] Storing system parameters in SPI EEPROM (Microchip 25LC256)
-* [x] Tesla M3 oil pump control via LIN bus
+* [x] Tesla M3 oil pump LIN bus driver — C2000 SCIA break generation and RX validated on hardware; oil temperature, pressure, motor speed, and supply voltage spot values updating correctly; pump commanded at correct speed (1.3 A vs 7–9 A uncontrolled)
 * [x] Build compatibility with TI C2000 compiler 25.11.0.LTS
 * [x] WSL2/Ubuntu build environment support
 * [x] First hardware validation on Tesla FDU inverter (RAM boot via JTAG)
@@ -92,6 +92,7 @@ Active development is on the `portable-cpp` branch of the fork
 * [x] PMIC watchdog fix — startup sequence reordered so `parm_load()` completes before `PowerWatchdog::Init()` starts the 100 ms window watchdog, preventing timeout during EEPROM load
 * [x] ADC trigger prescaler bug fixed — `EPWM_setADCTriggerEventPrescale` was set to `15U` causing the PWM ISR to fire at 813 Hz instead of 12.2 kHz; this produced a 15× slip frequency error requiring ~150 Hz commanded slip to achieve what should be 10 Hz, with massive reactive current and inverter overheating as symptoms
 * [x] C28x word-size bug fixed in `SineCore::Atan2` — `int temp` changed to `int32_t temp` (two occurrences); on C28x `int` is 16-bit so resolver coordinates were silently truncated in the closed-loop angle calculation; the bug was hidden on STM32 where `int` is 32-bit
+* [x] Tesla M3 oil pump LIN bus validated on hardware — `tmpoil`, `oilpres`, `pmprev`, `upmp` spot values confirmed updating; break generation uses baud-rate trick (9600 → 19200) with FIFO disabled during break so TXEMPTY is reliable; `SCI_performSoftwareReset` after FIFO re-enable clears stale SCIRXBUF/RXRDY/BRKDT that otherwise silently blocks the FIFO receiver
 
 ### In Progress
 * [ ] Motor tuning with corrected PWM ISR rate — first hardware testing with fixed firmware pending

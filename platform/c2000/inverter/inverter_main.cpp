@@ -45,6 +45,8 @@
 #include "temp_meas.h"
 #include "throttle.h"
 #include "canlogger.h"
+#include "c2000_lin.h"
+#include "teslam3oilpump.h"
 
 extern char* ftoa(char* buf, float val, int decimals);
 
@@ -62,6 +64,8 @@ using namespace c2000;
 static C2000Can* can __attribute__((unused));
 static CanMap* canMap __attribute__((unused));
 static CanSdo* canSdo __attribute__((unused));
+static C2000Lin linBus;
+static TeslaM3OilPump oilPump;
 
 void Param::Change(Param::PARAM_NUM paramNum)
 {
@@ -162,6 +166,17 @@ typedef TeslaM3PowerWatchdog<PmicSpiDriver> PowerWatchdog;
 static void taskStrobePowerWatchdog()
 {
     PowerWatchdog::Strobe();
+}
+
+static void taskOilPump()
+{
+    static uint8_t count = 0;
+    oilPump.Ms10Task();
+    if (++count >= 10)
+    {
+        oilPump.Ms100Task();
+        count = 0;
+    }
 }
 
 // task called every 100ms to update the resolver frequency estimate (10 Hz)
@@ -269,6 +284,9 @@ void main(void)
     // Initialise scheduler and PMIC watchdog now that slow EEPROM reads are
     // done so the 100ms window watchdog doesn't expire during parm_load()
     Scheduler::Init();
+    linBus.HwInit();
+    oilPump.SetLinInterface(&linBus);
+    Scheduler::AddTask(taskOilPump, 10);
     PRINTF("Pmic driver initialisation: %s\n",
         PowerWatchdog::Init() == PowerWatchdog::OK ? "OK" : "Fail");
 
@@ -491,6 +509,27 @@ void main(void)
                 PRINTF("tmphs=%s C  tmpm=%s C\n",
                     ftoa(tmphsStr, tmphsMax, 1), ftoa(tmpmStr, tmpm, 1));
                 PRINTF("\n");
+            }
+
+            // LIN bus diagnostics — rxCount=0 means no echo from transceiver
+            {
+                int rxc = linBus.GetLastRxCount();
+                const uint8_t* rb = linBus.GetRawBuffer();
+                if (rxc < 0)
+                {
+                    PRINTF("LIN: no HasReceived call yet\n");
+                }
+                else
+                {
+                    PRINTF("LIN: lastRxCount=%d buf=[%02x %02x %02x %02x %02x %02x]\n",
+                        rxc,
+                        rxc > 0 ? (unsigned)rb[0] : 0U,
+                        rxc > 1 ? (unsigned)rb[1] : 0U,
+                        rxc > 2 ? (unsigned)rb[2] : 0U,
+                        rxc > 3 ? (unsigned)rb[3] : 0U,
+                        rxc > 4 ? (unsigned)rb[4] : 0U,
+                        rxc > 5 ? (unsigned)rb[5] : 0U);
+                }
             }
 
             lastLoad = currentLoad;

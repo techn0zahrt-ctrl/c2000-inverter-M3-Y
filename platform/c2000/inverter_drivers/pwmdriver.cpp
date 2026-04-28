@@ -152,6 +152,9 @@ __interrupt void motor_control_adc_isr(void)
     uint32_t totalTime = startTime - PerformanceCounter::GetCount();
     execTicks = execTicks + totalTime;
 
+    if (execTicks > 16000)  // ~16,384 cycles per 12.2kHz period at 200MHz
+        Param::SetInt(Param::status, Param::GetInt(Param::status) | 0x8000);
+
     //
     // Clear the interrupt flag
     //

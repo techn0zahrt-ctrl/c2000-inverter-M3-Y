@@ -14,7 +14,8 @@ add_library(
   src/canmap.cpp
   src/cansdo.cpp
   src/sdocommands.cpp
-  src/canobd2.cpp)
+  src/canobd2.cpp
+  src/linbus.cpp)
 target_link_libraries(libopeninv global_options)
 target_include_directories(libopeninv
                            PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
