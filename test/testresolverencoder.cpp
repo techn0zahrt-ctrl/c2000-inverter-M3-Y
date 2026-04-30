@@ -133,6 +133,9 @@ TEST(TestResolverEncoder, StaticPosition)
         .Times(StartupCount)
         .WillRepeatedly(Return(CosineValue));
 
+    // Number of PWM cycles the blend ramp takes to reach full scale
+    static const int BlendCycles = 256;
+
     // Verify that nothing further changes as we complete the inital settling
     // period and start sampling for real
     for (int i = 0; i < StartupCount; i++)
@@ -148,9 +151,19 @@ TEST(TestResolverEncoder, StaticPosition)
             Resolver::UpdateRotorFrequency(FrequencyUpdate);
         }
 
-        // State verification
+        // State verification — angle ramps from 0 to ComputedAngle over the
+        // first BlendCycles PWM cycles after resolver lock to avoid a step
+        // change that would cause a current spike on hardware.
         EXPECT_EQ(Resolver::SeenNorthSignal(), true);
-        EXPECT_THAT(Resolver::GetRotorAngle(), IntNear(ComputedAngle, 1));
+        if (i < BlendCycles)
+        {
+            // Allow +1 for atan2 rounding: raw may be ComputedAngle+1 at full blend
+            EXPECT_THAT(Resolver::GetRotorAngle(), Le(ComputedAngle + 1));
+        }
+        else
+        {
+            EXPECT_THAT(Resolver::GetRotorAngle(), IntNear(ComputedAngle, 1));
+        }
         EXPECT_EQ(Resolver::GetRotorFrequency(), 0);
         EXPECT_EQ(Resolver::GetSpeed(), 0);
         EXPECT_EQ(Resolver::GetFullTurns(), 0);
@@ -164,6 +177,8 @@ TEST(TestResolverEncoder, StaticPosition)
 //! Test a static position with insufficient amplitude
 TEST(TestResolverEncoder, LowAmplitude)
 {
+    ErrorMessage::ResetAll();
+    ErrorMessage::SetTime(1);
     Resolver::Reset();
 
     Resolver::SetPwmFrequency(DefaultPwmFrequency);

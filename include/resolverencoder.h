@@ -69,7 +69,9 @@ public:
         sm_angle = 0.0f;
         sm_poleCounter = 0;
         sm_turnsSinceLastSample = 0;
+        sm_blendFactor = 0;
     }
+
 
     //
     //! \brief Return whether the north position has been seen and the absolute
@@ -89,6 +91,18 @@ public:
     static void UpdateRotorAngle(__attribute__((__unused__)) int dir)
     {
         sm_angle = DecodeAngle();
+
+        bool locked =
+            (sm_resolverMax - sm_resolverMin) > details::MinResolverAmplitude;
+        if (locked)
+        {
+            if (sm_blendFactor < 256)
+                sm_blendFactor++;
+        }
+        else
+        {
+            sm_blendFactor = 0;
+        }
 
         UpdateTurns();
 
@@ -116,7 +130,7 @@ public:
     //
     static void UpdateRotorFrequency(int callingFrequency)
     {
-        int absTurns = ABS(sm_turnsSinceLastSample);
+        float absTurns = ABS(sm_turnsSinceLastSample);
         if (sm_startupDelay == 0 && absTurns > details::StableAngle)
         {
             sm_lastFrequency = (callingFrequency * absTurns) / details::TwoPi;
@@ -147,7 +161,9 @@ public:
     //
     static uint16_t GetRotorAngle()
     {
-        return (sm_angle * details::FullRotationInt) / details::TwoPi;
+        uint16_t raw =
+            (uint16_t)((sm_angle * details::FullRotationInt) / details::TwoPi);
+        return (uint16_t)((uint32_t)sm_blendFactor * raw / 256U);
     }
 
     //
@@ -275,7 +291,10 @@ private:
     //! Number of poles we have seen in the current rotation
     static int sm_poleCounter;
 
-    static int32_t sm_turnsSinceLastSample;
+    static float sm_turnsSinceLastSample;
+
+    //! Blend factor (0..256): ramps up each PWM cycle while resolver is locked
+    static uint16_t sm_blendFactor;
 };
 
 // Instances of each member variable
@@ -311,7 +330,10 @@ template <typename ResolverSampleT>
 int ResolverEncoder<ResolverSampleT>::sm_poleCounter;
 
 template <typename ResolverSampleT>
-int32_t ResolverEncoder<ResolverSampleT>::sm_turnsSinceLastSample;
+float ResolverEncoder<ResolverSampleT>::sm_turnsSinceLastSample;
+
+template <typename ResolverSampleT>
+uint16_t ResolverEncoder<ResolverSampleT>::sm_blendFactor;
 
 } // namespace encoder
 
