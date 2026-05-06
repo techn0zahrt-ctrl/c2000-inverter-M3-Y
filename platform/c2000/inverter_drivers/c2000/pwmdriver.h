@@ -49,8 +49,10 @@ public:
     static void    AcHeatTimerSetup();
     static void    AcHeat(s32fp ampnom);
     static void    SetChargeCurrent(int16_t dc);
-    static int32_t GetCpuLoad();
-    static void    ResetCpuLoad();
+    static int32_t  GetCpuLoad();
+    static int32_t  GetMaxExecTicks();
+    static void     ResetCpuLoad();
+    static uint32_t GetAdcOverflowCount();
 
 private:
     static uint32_t sm_phaseAEpwmBase;

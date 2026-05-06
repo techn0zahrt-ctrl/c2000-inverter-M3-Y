@@ -93,9 +93,13 @@ Active development is on the `portable-cpp` branch of the fork
 * [x] ADC trigger prescaler bug fixed — `EPWM_setADCTriggerEventPrescale` was set to `15U` causing the PWM ISR to fire at 813 Hz instead of 12.2 kHz; this produced a 15× slip frequency error requiring ~150 Hz commanded slip to achieve what should be 10 Hz, with massive reactive current and inverter overheating as symptoms
 * [x] C28x word-size bug fixed in `SineCore::Atan2` — `int temp` changed to `int32_t temp` (two occurrences); on C28x `int` is 16-bit so resolver coordinates were silently truncated in the closed-loop angle calculation; the bug was hidden on STM32 where `int` is 32-bit
 * [x] Tesla M3 oil pump LIN bus validated on hardware — `tmpoil`, `oilpres`, `pmprev`, `upmp` spot values confirmed updating; break generation uses baud-rate trick (9600 → 19200) with FIFO disabled during break so TXEMPTY is reliable; `SCI_performSoftwareReset` after FIFO re-enable clears stale SCIRXBUF/RXRDY/BRKDT that otherwise silently blocks the FIFO receiver
+* [x] Resolver frequency calculation corrected — `UpdateRotorFrequency()` moved from scheduler timer ISR into PWM ISR, called every 1220 PWM cycles (exactly 100 ms at 12.2 kHz); eliminates timing collapse where scheduler tasks could compress multiple 100 ms windows into one call, producing absurd sample counts and frequency spikes
+* [x] Resolver frequency spike protection — output clamped to 200 Hz; individual candidate values ≥ 500 Hz discarded as implausible (previous value held); low-amplitude condition holds last known angle rather than jumping to 0, preventing `UpdateTurns()` from accumulating a false step
+* [x] ISR execution timing corrected — `execTicks` now measures each ISR invocation independently (was accumulating without reset); `s_maxExecTicks` tracks worst-case ISR duration; `s_adcOverflowCount` counts ADCA INT1 overflow events, confirming whether tasks are blocking ADC servicing
+* [x] Extended diagnostic CAN logging — resolver window diagnostics (`absTurns`, `maxDiff`, `samples`) logged alongside ISR timing (`execTicks`, `maxExecTicks`, `overflows`) and motor speed; enables in-the-field spike diagnosis without JTAG
 
 ### In Progress
-* [ ] Motor tuning with corrected PWM ISR rate — first hardware testing with fixed firmware pending
+* [ ] Motor tuning under load — slip frequency and ampnom calibration at higher currents; hardware testing with fully corrected resolver timing pending
 * [ ] CAN bus reliability — cable quality matters; use twisted/shielded CAN cable and verify 120 Ω termination at both ends of the bus
 * [ ] Inverter heating under load — deadtime and switching loss investigation needed at higher power levels
 * [ ] Vehicle control loop — throttle and direction via CAN for in-vehicle use

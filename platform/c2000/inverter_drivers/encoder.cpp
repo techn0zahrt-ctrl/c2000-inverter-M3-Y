@@ -60,6 +60,11 @@ static uint32_t s_fullTurns             = 0;
 static int      s_poleCounter           = 0;
 static uint32_t s_pwmFrq __attribute__((unused)) = 1;
 static int16_t  s_resolverPeakAmplitude = 0;
+static float    s_lastAbsTurns          = 0.0f;
+static float    s_maxSignedDiff         = 0.0f;
+static float    s_lastMaxSignedDiff     = 0.0f;
+static uint32_t s_sampleCount          = 0;
+static uint32_t s_lastSampleCount      = 0;
 
 // ---------------------------------------------------------------------------
 // Adapter: offset-correct the raw ADC readings for atan2
@@ -116,7 +121,7 @@ static float DecodeAngle()
     {
         if (s_startupDelay == 0)
             ErrorMessage::Post(ERR_LORESAMP);
-        return 0.0f;
+        return s_lastAngle;
     }
 }
 
@@ -136,6 +141,10 @@ static void UpdateTurns()
         signedDiff += sign * TWO_PI;
     }
 
+    float absDiff2 = signedDiff < 0.0f ? -signedDiff : signedDiff;
+    if (absDiff2 > s_maxSignedDiff) s_maxSignedDiff = absDiff2;
+
+    s_sampleCount++;
     s_turnsSinceLastSample += signedDiff;
 }
 
@@ -207,10 +216,20 @@ void Encoder::UpdateRotorFrequency(int callingFrequency)
                          ? -s_turnsSinceLastSample
                          : s_turnsSinceLastSample;
 
+    s_lastAbsTurns = absTurns;
+    s_lastMaxSignedDiff = s_maxSignedDiff;
+    s_maxSignedDiff = 0.0f;
+    s_lastSampleCount = s_sampleCount;
+    s_sampleCount = 0;
+    float candidate = ((float)callingFrequency * absTurns) / TWO_PI;
     if (s_startupDelay == 0 && absTurns > STABLE_ANGLE)
     {
-        s_lastFrequency     = ((float)callingFrequency * absTurns) / TWO_PI;
-        s_detectedDirection = s_turnsSinceLastSample > 0.0f ? 1 : -1;
+        if (candidate < 500.0f)
+        {
+            s_lastFrequency     = candidate;
+            s_detectedDirection = s_turnsSinceLastSample > 0.0f ? 1 : -1;
+        }
+        // else: implausible spike — keep previous s_lastFrequency
     }
     else
     {
@@ -218,6 +237,24 @@ void Encoder::UpdateRotorFrequency(int callingFrequency)
         s_detectedDirection = 0;
     }
     s_turnsSinceLastSample = 0.0f;
+}
+
+/** Return the number of UpdateTurns() calls in the last UpdateRotorFrequency interval. */
+uint32_t Encoder::GetLastSampleCount()
+{
+    return s_lastSampleCount;
+}
+
+/** Return the largest single-step signedDiff magnitude seen in the last UpdateRotorFrequency interval. */
+float Encoder::GetLastMaxSignedDiff()
+{
+    return s_lastMaxSignedDiff;
+}
+
+/** Return the absolute accumulated turns from the last UpdateRotorFrequency interval. */
+float Encoder::GetLastAbsTurns()
+{
+    return s_lastAbsTurns;
 }
 
 /** Inform the encoder of the PWM carrier frequency (Hz). */
@@ -240,7 +277,8 @@ uint16_t Encoder::GetRotorAngle()
 /** Return rotor frequency in fixed-point Hz. */
 u32fp Encoder::GetRotorFrequency()
 {
-    return FP_FROMFLT(s_lastFrequency);
+    float clamped = s_lastFrequency > 200.0f ? 200.0f : s_lastFrequency;
+    return FP_FROMFLT(clamped);
 }
 
 /** Return motor speed in RPM (electrical frequency * 60 / pole pairs). */

@@ -43,6 +43,9 @@ public:
     static u32fp    GetRotorFrequency();
     static int      GetRotorDirection();
     static int      GetSpeed();
+    static float    GetLastAbsTurns();
+    static float    GetLastMaxSignedDiff();
+    static uint32_t GetLastSampleCount();
 };
 
 } // namespace c2000

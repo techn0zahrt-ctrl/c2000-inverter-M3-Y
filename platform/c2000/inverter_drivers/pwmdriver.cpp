@@ -23,6 +23,7 @@
 #include "driverlib.h"
 #include "errormessage.h"
 #include "params.h"
+#include "c2000/encoder.h"
 #include "c2000/motoranalogcapture.h"
 #include "c2000/performancecounter.h"
 #include "c2000/pwmgeneration.h"
@@ -127,7 +128,9 @@ void PwmDriver::SetPhasePwm(uint32_t phaseA, uint32_t phaseB, uint32_t phaseC)
 /** Store of number of SYSCLOCK ticks we spend running the main PWM interrupt
  * handler
  */
-static int32_t execTicks;
+static int32_t  execTicks;
+static int32_t  s_maxExecTicks     = 0;
+static uint32_t s_adcOverflowCount = 0;
 
 /**
  * Main motor control ADC data available interrupt. This fires when the PWM
@@ -140,6 +143,14 @@ __interrupt void motor_control_adc_isr(void)
 
     PwmGeneration::Run();
 
+    static uint16_t s_freqUpdateCounter = 0;
+    if (++s_freqUpdateCounter >= 1220)
+    {
+        s_freqUpdateCounter = 0;
+        Encoder::UpdateRotorFrequency(10);
+        Param::SetInt(Param::speed, Encoder::GetSpeed());
+    }
+
     // Update DC link voltage every PWM cycle for low-latency protection
     float udcgain = Param::GetFloat(Param::udcgain);
     if (udcgain > 0)
@@ -150,7 +161,9 @@ __interrupt void motor_control_adc_isr(void)
 
     // Measure the time - handles timer overflows
     uint32_t totalTime = startTime - PerformanceCounter::GetCount();
-    execTicks = execTicks + totalTime;
+    execTicks = (int32_t)totalTime;
+    if (execTicks > s_maxExecTicks)
+        s_maxExecTicks = execTicks;
 
     if (execTicks > 16000)  // ~16,384 cycles per 12.2kHz period at 200MHz
         Param::SetInt(Param::status, Param::GetInt(Param::status) | 0x8000);
@@ -167,6 +180,7 @@ __interrupt void motor_control_adc_isr(void)
     {
         ADC_clearInterruptOverflowStatus(ADCA_BASE, ADC_INT_NUMBER1);
         ADC_clearInterruptStatus(ADCA_BASE, ADC_INT_NUMBER1);
+        s_adcOverflowCount++;
     }
 
     //
@@ -652,6 +666,22 @@ void PwmDriver::SetChargeCurrent(int16_t dc)
 int32_t PwmDriver::GetCpuLoad()
 {
     return execTicks;
+}
+
+/**
+ * Return the worst-case ISR duration in SYSCLOCK cycles since power-on.
+ */
+int32_t PwmDriver::GetMaxExecTicks()
+{
+    return s_maxExecTicks;
+}
+
+/**
+ * Return the cumulative count of ADC interrupt overflow events since power-on.
+ */
+uint32_t PwmDriver::GetAdcOverflowCount()
+{
+    return s_adcOverflowCount;
 }
 
 /**

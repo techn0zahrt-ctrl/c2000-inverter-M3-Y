@@ -112,33 +112,16 @@ TEST(TestResolverEncoder, StaticPosition)
     const int16_t  CosineValue = TestAmplitude * cos(TestAngle * (pi / 180));
     const uint16_t ComputedAngle = (TestAngle * 65536) / 360;
 
-    // Simulate an update from the main control loop indicating the first
-    // set of sine/cosine values are available
-    EXPECT_CALL(sample, ResolverSine).Times(1).WillOnce(Return(SineValue));
-    EXPECT_CALL(sample, ResolverCosine).Times(1).WillOnce(Return(CosineValue));
-    Resolver::UpdateRotorAngle(1);
-
-    // Verify no position or speed readings are available yet
-    EXPECT_EQ(Resolver::SeenNorthSignal(), true);
-    EXPECT_EQ(Resolver::GetRotorAngle(), 0);
-    EXPECT_EQ(Resolver::GetRotorFrequency(), 0);
-    EXPECT_EQ(Resolver::GetSpeed(), 0);
-    EXPECT_EQ(Resolver::GetFullTurns(), 0);
-    EXPECT_EQ(Resolver::GetRotorDirection(), 0);
-
     EXPECT_CALL(sample, ResolverSine)
-        .Times(StartupCount)
+        .Times(StartupCount + 1)
         .WillRepeatedly(Return(SineValue));
     EXPECT_CALL(sample, ResolverCosine)
-        .Times(StartupCount)
+        .Times(StartupCount + 1)
         .WillRepeatedly(Return(CosineValue));
-
-    // Number of PWM cycles the blend ramp takes to reach full scale
-    static const int BlendCycles = 256;
 
     // Verify that nothing further changes as we complete the inital settling
     // period and start sampling for real
-    for (int i = 0; i < StartupCount; i++)
+    for (int i = 0; i < StartupCount + 1; i++)
     {
         // Simulate an update from the main control loop indicating new
         // sine/cosine values are available
@@ -151,19 +134,8 @@ TEST(TestResolverEncoder, StaticPosition)
             Resolver::UpdateRotorFrequency(FrequencyUpdate);
         }
 
-        // State verification — angle ramps from 0 to ComputedAngle over the
-        // first BlendCycles PWM cycles after resolver lock to avoid a step
-        // change that would cause a current spike on hardware.
         EXPECT_EQ(Resolver::SeenNorthSignal(), true);
-        if (i < BlendCycles)
-        {
-            // Allow +1 for atan2 rounding: raw may be ComputedAngle+1 at full blend
-            EXPECT_THAT(Resolver::GetRotorAngle(), Le(ComputedAngle + 1));
-        }
-        else
-        {
-            EXPECT_THAT(Resolver::GetRotorAngle(), IntNear(ComputedAngle, 1));
-        }
+        EXPECT_THAT(Resolver::GetRotorAngle(), IntNear(ComputedAngle, 1));
         EXPECT_EQ(Resolver::GetRotorFrequency(), 0);
         EXPECT_EQ(Resolver::GetSpeed(), 0);
         EXPECT_EQ(Resolver::GetFullTurns(), 0);

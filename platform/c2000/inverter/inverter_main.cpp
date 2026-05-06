@@ -179,13 +179,6 @@ static void taskOilPump()
     }
 }
 
-// task called every 100ms to update the resolver frequency estimate (10 Hz)
-static void taskUpdateRotorFrequency()
-{
-    Encoder::UpdateRotorFrequency(10);
-    Param::SetInt(Param::speed, Encoder::GetSpeed());
-}
-
 static void onPrintRequest(CanSdo* sdo, int request)
 {
     if (request == 0)
@@ -290,9 +283,9 @@ void main(void)
     PRINTF("Pmic driver initialisation: %s\n",
         PowerWatchdog::Init() == PowerWatchdog::OK ? "OK" : "Fail");
 
-    // Add periodic tasks: watchdog strobe and resolver frequency update (100ms)
+    // Add periodic tasks: watchdog strobe (100ms)
+    // Note: taskUpdateRotorFrequency is called from the PWM ISR every 1220 cycles
     Scheduler::AddTask(taskStrobePowerWatchdog, 100);
-    Scheduler::AddTask(taskUpdateRotorFrequency, 100);
 
     // Set up gate drivers — must be after PMIC init since gate PSU depends on
     // PMIC reaching NORMAL state
@@ -409,21 +402,15 @@ void main(void)
         // enabled logging via CAN ID 0x7FE and the requested interval elapses.
         if (CanLogger::Tick(5))
         {
-            int32_t currentLoad = PwmGeneration::GetCpuLoad();
-
             //On time
             PRINTF("On Time: %d.%d s\n", (int)(OnTime/200), (int)((OnTime%200)*5));
             // Gate driver health
+            int32_t currentLoad = PwmGeneration::GetCpuLoad();
+            PRINTF("ISR: execTicks=%d maxExecTicks=%d overflows=%u\n",
+                (int)currentLoad,
+                (int)PwmDriver::GetMaxExecTicks(),
+                (unsigned)PwmDriver::GetAdcOverflowCount());
             PRINTF("Gate Drive: %s\n", GateDriver::IsFaulty() ? "FAULT" : "OK");
-            /*
-            uint16_t gd_status1[6], gd_status2[6], gd_status3[6];
-            GateDriver::GetStatus(gd_status1, gd_status2, gd_status3);
-            PRINTF("GD0: S1=0x%x S2=0x%x S3=0x%x\n", gd_status1[0], gd_status2[0], gd_status3[0]);
-            PRINTF("GD1: S1=0x%x S2=0x%x S3=0x%x\n", gd_status1[1], gd_status2[1], gd_status3[1]);
-            PRINTF("GD2: S1=0x%x S2=0x%x S3=0x%x\n", gd_status1[2], gd_status2[2], gd_status3[2]);
-            PRINTF("PWM cycles: %d\n", currentLoad - lastLoad);
-            */
-
             // PMIC status registers
             uint16_t devstat = 0, syssf = 0, monsf0 = 0, monsf1 = 0, monsf2 = 0;
             if (PowerWatchdog::ReadStatusRegisters(devstat, syssf, monsf0, monsf1, monsf2) ==
@@ -444,8 +431,6 @@ void main(void)
             }
             if (DropNormal == 1)
                 PRINTF("Normal Dropped: %d.%d s\n", (int)(DropNormalTime/200), (int)((DropNormalTime%200)*5));
-
-
             // DC link voltage (also updated in ISR; refresh boost/weakening here)
             MotorVoltage::SetBoost(Param::GetInt(Param::boost));
             MotorVoltage::SetWeakeningFrq(Param::GetFloat(Param::fweakstrt));
@@ -468,13 +453,20 @@ void main(void)
                     (int)sinRaw, (int)cosRaw,
                     (int)sinC,   (int)cosC,
                     ftoa(angleStr, Param::GetFloat(Param::angle), 1));
+                char fstatStr[16], absTurnsStr[16];
+                char maxDiffStr[16];
+                PRINTF("Resolver: fstat=%s Hz  absTurns=%s rad  maxDiff=%s rad  samples=%u  speed=%d rpm\n",
+                    ftoa(fstatStr, Param::GetFloat(Param::fstat), 2),
+                    ftoa(absTurnsStr, Encoder::GetLastAbsTurns(), 3),
+                    ftoa(maxDiffStr, Encoder::GetLastMaxSignedDiff(), 4),
+                    (unsigned)Encoder::GetLastSampleCount(),
+                    Encoder::GetSpeed());
+                    //Param::GetInt(Param::speed)
             }
-
             // HVIL current
             char hvilStr[16];
             PRINTF("HVIL: %s mA\n",
                 ftoa(hvilStr, Param::GetFloat(Param::hvilcur), 1));
-
             // Temperature mux — all 6 channels, update tmphs/tmpm params
             {
                 float tmphsMax = -100.0f;
@@ -508,9 +500,7 @@ void main(void)
                 char tmphsStr[16], tmpmStr[16];
                 PRINTF("tmphs=%s C  tmpm=%s C\n",
                     ftoa(tmphsStr, tmphsMax, 1), ftoa(tmpmStr, tmpm, 1));
-                PRINTF("\n");
             }
-
             // LIN bus diagnostics — rxCount=0 means no echo from transceiver
             {
                 int rxc = linBus.GetLastRxCount();
@@ -531,7 +521,7 @@ void main(void)
                         rxc > 5 ? (unsigned)rb[5] : 0U);
                 }
             }
-
+            PRINTF("\n");
             lastLoad = currentLoad;
         }
         if (loopCount % 25 == 0)

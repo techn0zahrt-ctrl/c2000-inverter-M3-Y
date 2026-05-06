@@ -40,6 +40,9 @@ public:
     // add a task with a specific period */
 	static void AddTask(void (*function)(void), uint32_t msPeriod);
 
+    // run any tasks that have been flagged as pending by their timer ISR
+    static void RunPending();
+
 private:
     static void InitCPUTimers();
     static void ConfigureCPUTimer(uint32_t cpuTimer, uint32_t msPeriod);

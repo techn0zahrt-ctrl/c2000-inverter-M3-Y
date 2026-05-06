@@ -253,7 +253,7 @@
 
 /***** Enum String definitions *****/
 #define OPMODES      "0=Off, 1=Run, 2=ManualRun, 3=Boost, 4=Buck, 5=Sine, 6=AcHeat"
-#define PWMFRQS      "0=17.6kHz, 1=8.8kHz, 2=4.4KHz"
+#define PWMFRQS      "0=24.4kHz, 1=12.2kHz, 2=6.1KHz"
 #define PWMPOLS      "0=ActHigh, 1=ActLow"
 #define DIRS         "-1=Reverse, 0=Neutral, 1=Forward"
 #define TRIPMODES    "0=AllOff, 1=DcSwOn, 2=PrechargeOn, 3=AutoResume"

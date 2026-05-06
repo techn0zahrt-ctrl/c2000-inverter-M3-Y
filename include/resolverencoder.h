@@ -43,9 +43,11 @@ static const float TwoPi = 2 * Pi;
 //! Angle difference at which we assume jitter to become irrelevant
 static const float StableAngle = (10.0 * TwoPi) / 360.0;
 
-//! Minimum amplitude the resolver signals must reach during start up
-//! stablisation period
-static const uint16_t MinResolverAmplitude = 1000;
+//! Amplitude threshold to acquire resolver lock
+static const uint16_t LockAmplitude = 1200;
+
+//! Amplitude threshold below which resolver lock is lost
+static const uint16_t UnlockAmplitude = 700;
 
 } // namespace details
 
@@ -69,7 +71,8 @@ public:
         sm_angle = 0.0f;
         sm_poleCounter = 0;
         sm_turnsSinceLastSample = 0;
-        sm_blendFactor = 0;
+        sm_resolverLocked = false;
+        sm_resolverLockedPrev = false;
     }
 
 
@@ -92,17 +95,15 @@ public:
     {
         sm_angle = DecodeAngle();
 
-        bool locked =
-            (sm_resolverMax - sm_resolverMin) > details::MinResolverAmplitude;
-        if (locked)
+        if (sm_resolverLocked != sm_resolverLockedPrev)
         {
-            if (sm_blendFactor < 256)
-                sm_blendFactor++;
+            sm_resolverLockedPrev = sm_resolverLocked;
+            sm_turnsSinceLastSample = 0;
+            sm_lastAngle = sm_angle;
+            sm_startupDelay = sm_startupDelay > 0 ? sm_startupDelay - 1 : 0;
+            return;
         }
-        else
-        {
-            sm_blendFactor = 0;
-        }
+        sm_resolverLockedPrev = sm_resolverLocked;
 
         UpdateTurns();
 
@@ -161,9 +162,7 @@ public:
     //
     static uint16_t GetRotorAngle()
     {
-        uint16_t raw =
-            (uint16_t)((sm_angle * details::FullRotationInt) / details::TwoPi);
-        return (uint16_t)((uint32_t)sm_blendFactor * raw / 256U);
+        return (uint16_t)((sm_angle * details::FullRotationInt) / details::TwoPi);
     }
 
     //
@@ -237,26 +236,34 @@ private:
     {
         int16_t sin = ResolverSampleT::ResolverSine();
         int16_t cos = ResolverSampleT::ResolverCosine();
-        ;
 
-        // Wait for signal to reach usable amplitude
-        if ((sm_resolverMax - sm_resolverMin) > details::MinResolverAmplitude)
-        {
-            return atan2(sin, cos);
-        }
-        else
+        if (!sm_resolverLocked)
         {
             int16_t temp = MIN(sin, cos);
             sm_resolverMin = MIN(temp, sm_resolverMin);
             temp = MAX(sin, cos);
             sm_resolverMax = MAX(temp, sm_resolverMax);
 
-            if (sm_startupDelay == 0)
+            if ((sm_resolverMax - sm_resolverMin) > details::LockAmplitude)
             {
-                ErrorMessage::Post(ERR_LORESAMP);
+                sm_resolverLocked = true;
             }
-            return 0;
+            else
+            {
+                if (sm_startupDelay == 0)
+                    ErrorMessage::Post(ERR_LORESAMP);
+                return sm_angle;
+            }
         }
+        else if ((sm_resolverMax - sm_resolverMin) < details::UnlockAmplitude)
+        {
+            sm_resolverLocked = false;
+            if (sm_startupDelay == 0)
+                ErrorMessage::Post(ERR_LORESAMP);
+            return sm_angle;
+        }
+
+        return atan2(sin, cos);
     }
 
 private:
@@ -293,8 +300,11 @@ private:
 
     static float sm_turnsSinceLastSample;
 
-    //! Blend factor (0..256): ramps up each PWM cycle while resolver is locked
-    static uint16_t sm_blendFactor;
+    //! True once resolver amplitude has reached LockAmplitude; cleared by Reset()
+    static bool sm_resolverLocked;
+
+    //! Previous value of sm_resolverLocked; used to detect lock state transitions
+    static bool sm_resolverLockedPrev;
 };
 
 // Instances of each member variable
@@ -333,7 +343,10 @@ template <typename ResolverSampleT>
 float ResolverEncoder<ResolverSampleT>::sm_turnsSinceLastSample;
 
 template <typename ResolverSampleT>
-uint16_t ResolverEncoder<ResolverSampleT>::sm_blendFactor;
+bool ResolverEncoder<ResolverSampleT>::sm_resolverLocked;
+
+template <typename ResolverSampleT>
+bool ResolverEncoder<ResolverSampleT>::sm_resolverLockedPrev;
 
 } // namespace encoder
 
