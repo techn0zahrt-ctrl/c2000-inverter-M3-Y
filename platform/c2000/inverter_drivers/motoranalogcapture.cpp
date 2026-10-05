@@ -104,7 +104,8 @@ void MotorAnalogCapture::ConfigureSoc(ADC_Trigger trigger)
     //
     // Configure the ADC conversion complete interrupt for motor signals
     //
-    ADC_setInterruptSource(ADCA_BASE, ADC_INT_NUMBER1, ADC_SOC_NUMBER0);
+    // SOC2 is last on ADCA: resolver and HVIL results must be fresh in the ISR.
+    ADC_setInterruptSource(ADCA_BASE, ADC_INT_NUMBER1, ADC_SOC_NUMBER2);
     ADC_enableInterrupt(ADCA_BASE, ADC_INT_NUMBER1);
     ADC_clearInterruptStatus(ADCA_BASE, ADC_INT_NUMBER1);
 

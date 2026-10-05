@@ -56,4 +56,4 @@ jobs:
       - name: Run unit tests on host
         run: |
           cd ${{ github.workspace }}
-          build/host/test/OpenInverterTest
+          ctest --test-dir build/host/test --output-on-failure

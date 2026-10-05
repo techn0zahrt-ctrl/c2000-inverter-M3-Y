@@ -37,6 +37,7 @@ public:
     static void DisableMasterOutput();
     static void EnableOutput();
     static void DisableOutput();
+    static bool HvilTripped();
     static void SetPhasePwm(uint32_t phaseA, uint32_t phaseB, uint32_t phaseC);
     static void EnableChargeOutput(Modes opmode);
     static void EnableACHeatOutput();

@@ -11,6 +11,10 @@ FetchContent_MakeAvailable(googletest)
 
 enable_testing()
 
+add_executable(HvilInterlockTest testhvil.cpp)
+target_link_libraries(HvilInterlockTest PRIVATE global_options libopeninv link_last)
+add_test(NAME HvilInterlockTest COMMAND HvilInterlockTest)
+
 # Unit test the library
 file(
   GLOB

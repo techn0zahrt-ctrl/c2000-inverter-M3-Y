@@ -23,12 +23,15 @@
 #include "driverlib.h"
 #include "errormessage.h"
 #include "params.h"
+#include "hvilinterlock.h"
 #include "c2000/encoder.h"
 #include "c2000/motoranalogcapture.h"
 #include "c2000/performancecounter.h"
 #include "c2000/pwmgeneration.h"
 
 namespace c2000 {
+
+static HvilInterlock hvilInterlock;
 
 /** Phase delay between the resolver exciter square wave and the phase PWM.
  * Measured as approx 32.8 uSec between centre of exciter square wave and peak
@@ -59,6 +62,13 @@ void PwmDriver::DriverInit()
  */
 void PwmDriver::EnableMasterOutput()
 {
+    const bool interruptsDisabled = Interrupt_disableMaster();
+    if (!hvilInterlock.AllowsOutput())
+    {
+        if (!interruptsDisabled)
+            Interrupt_enableMaster();
+        return;
+    }
     EPWM_setActionQualifierContSWForceAction(
         sm_phaseAEpwmBase, EPWM_AQ_OUTPUT_A, EPWM_AQ_SW_DISABLED);
     EPWM_setActionQualifierContSWForceAction(
@@ -71,6 +81,11 @@ void PwmDriver::EnableMasterOutput()
         sm_phaseCEpwmBase, EPWM_AQ_OUTPUT_A, EPWM_AQ_SW_DISABLED);
     EPWM_setActionQualifierContSWForceAction(
         sm_phaseCEpwmBase, EPWM_AQ_OUTPUT_B, EPWM_AQ_SW_DISABLED);
+    EPWM_clearTripZoneFlag(sm_phaseAEpwmBase, EPWM_TZ_FLAG_OST);
+    EPWM_clearTripZoneFlag(sm_phaseBEpwmBase, EPWM_TZ_FLAG_OST);
+    EPWM_clearTripZoneFlag(sm_phaseCEpwmBase, EPWM_TZ_FLAG_OST);
+    if (!interruptsDisabled)
+        Interrupt_enableMaster();
 }
 
 /**
@@ -78,6 +93,10 @@ void PwmDriver::EnableMasterOutput()
  */
 void PwmDriver::DisableMasterOutput()
 {
+    // Trip-Zone overrides the complementary dead-band outputs immediately.
+    EPWM_forceTripZoneEvent(sm_phaseAEpwmBase, EPWM_TZ_FORCE_EVENT_OST);
+    EPWM_forceTripZoneEvent(sm_phaseBEpwmBase, EPWM_TZ_FORCE_EVENT_OST);
+    EPWM_forceTripZoneEvent(sm_phaseCEpwmBase, EPWM_TZ_FORCE_EVENT_OST);
     EPWM_setActionQualifierContSWForceAction(
         sm_phaseAEpwmBase, EPWM_AQ_OUTPUT_A, EPWM_AQ_SW_OUTPUT_LOW);
     EPWM_setActionQualifierContSWForceAction(
@@ -108,6 +127,11 @@ void PwmDriver::DisableOutput()
 {
     // Not used on the C2000
     DisableMasterOutput();
+}
+
+bool PwmDriver::HvilTripped()
+{
+    return hvilInterlock.Tripped();
 }
 
 /**
@@ -141,6 +165,21 @@ __interrupt void motor_control_adc_isr(void)
 {
     uint32_t startTime = PerformanceCounter::GetCount();
 
+    // Check the completed HVIL conversion before any controller can enable PWM.
+    uint16_t hvilRaw = MotorAnalogCapture::HvilCurrent();
+    Param::SetFixed(Param::hvilcur, (s32fp)hvilRaw * FP_FROMFLT(0.1875));
+    hvilInterlock.Update(hvilRaw, Param::Get(Param::hvilmin), Param::Get(Param::hvilmax));
+    Param::SetInt(Param::hvilstate, hvilInterlock.Tripped() ? 2 :
+        (hvilInterlock.AllowsOutput() ? 1 : 0));
+    if (hvilInterlock.Tripped())
+    {
+        PwmDriver::DisableMasterOutput();
+        PwmGeneration::SetOpmode(OFF);
+        Param::SetEnum(Param::opmode, OFF);
+        ErrorMessage::Post(ERR_HVIL);
+        Param::SetInt(Param::lasterr, ErrorMessage::GetLastError());
+    }
+
     PwmGeneration::Run();
 
     static uint16_t s_freqUpdateCounter = 0;
@@ -155,9 +194,6 @@ __interrupt void motor_control_adc_isr(void)
     float udcgain = Param::GetFloat(Param::udcgain);
     if (udcgain > 0)
         Param::SetFloat(Param::udc, (float)MotorAnalogCapture::UdcVoltage() / udcgain);
-
-    // Update HVIL current every PWM cycle (1 count = 0.1875 mA)
-    Param::SetFloat(Param::hvilcur, (float)MotorAnalogCapture::HvilCurrent() * 0.1875f);
 
     // Measure the time - handles timer overflows
     uint32_t totalTime = startTime - PerformanceCounter::GetCount();
@@ -321,6 +357,10 @@ static void initPhaseEPWM(
     uint16_t deadBandCount,
     uint16_t phaseDelay)
 {
+    EPWM_disableTripZoneAdvAction(base);
+    EPWM_setTripZoneAction(base, EPWM_TZ_ACTION_EVENT_TZA, EPWM_TZ_ACTION_LOW);
+    EPWM_setTripZoneAction(base, EPWM_TZ_ACTION_EVENT_TZB, EPWM_TZ_ACTION_LOW);
+    EPWM_forceTripZoneEvent(base, EPWM_TZ_FORCE_EVENT_OST);
     //
     // Allow the PWM to continue when debugging
     //
@@ -444,6 +484,7 @@ uint16_t PwmDriver::TimerSetup(
 
     // Disable sync(Freeze clock to PWM as well).
     SysCtl_disablePeripheral(SYSCTL_PERIPH_CLK_TBCLKSYNC);
+    hvilInterlock.Configure(EPWM_FREQ / (2UL * pwmmax));
 
     if (IsTeslaM3Inverter())
     {

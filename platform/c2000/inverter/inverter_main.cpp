@@ -118,8 +118,10 @@ void Param::Change(Param::PARAM_NUM paramNum)
 #endif // CTRL_FOC
 
             // Motor voltage (SINE only; FOC ignores these)
+#if CONTROL == CTRL_SINE
             MotorVoltage::SetBoost(Param::GetInt(Param::boost));
             MotorVoltage::SetWeakeningFrq(Param::GetFloat(Param::fweakstrt));
+#endif
 
             // Throttle pot calibration
             Throttle::potmin[0] = Param::GetInt(Param::potmin);
@@ -269,8 +271,13 @@ void main(void)
     // Load saved parameters from SPI EEPROM (slow — must be before watchdog)
     EEPROM::InitSPI();
     int loadResult = parm_load();
+#if CONTROL == CTRL_SINE
     Param::Set(Param::ampnom, 0);
     Param::Set(Param::fslipspnt, 0);
+#else
+    Param::Set(Param::manualiq, 0);
+    Param::Set(Param::manualid, 0);
+#endif
     PwmGeneration::SetAmpnom(0);
     PwmGeneration::SetFslip(0);
 
@@ -316,8 +323,6 @@ void main(void)
         Param::GetInt(Param::curki),
         Param::GetInt(Param::fwkp));
 
-    // Put in a bit of Q current to get the inverter to do something
-    Param::Set(Param::manualiq, FP_FROMFLT(0.6));
 #endif
 
     // Initialize CAN at 500kbps
@@ -339,10 +344,12 @@ void main(void)
     DEVICE_DELAY_US(1000);
     // Go for manual mode
     MotorVoltage::SetMaxAmp(SineCore::MAXAMP);
+#if CONTROL == CTRL_SINE
     MotorVoltage::SetBoost(Param::GetInt(Param::boost));
     MotorVoltage::SetWeakeningFrq(Param::GetFloat(Param::fweakstrt));
+#endif
     PwmGeneration::SetOpmode(MANUAL);
-    Param::SetEnum(Param::opmode, MANUAL);
+    Param::SetEnum(Param::opmode, PwmDriver::HvilTripped() ? OFF : MANUAL);
 
     // Wait for PWM ISR to fire at least once so ADC readings are valid
     while (PwmGeneration::GetCpuLoad() == 0)
@@ -390,8 +397,10 @@ void main(void)
 
         canMap->SendAll();
 
+#if CONTROL == CTRL_SINE
         PwmGeneration::SetAmpnom(Param::Get(Param::ampnom));
         PwmGeneration::SetFslip(Param::Get(Param::fslipspnt));
+#endif
 
         DEVICE_DELAY_US(5000);
 
@@ -432,8 +441,10 @@ void main(void)
             if (DropNormal == 1)
                 PRINTF("Normal Dropped: %d.%d s\n", (int)(DropNormalTime/200), (int)((DropNormalTime%200)*5));
             // DC link voltage (also updated in ISR; refresh boost/weakening here)
+#if CONTROL == CTRL_SINE
             MotorVoltage::SetBoost(Param::GetInt(Param::boost));
             MotorVoltage::SetWeakeningFrq(Param::GetFloat(Param::fweakstrt));
+#endif
             char udcStr[16];
             PRINTF("UDC: %s V\n", ftoa(udcStr, Param::GetFloat(Param::udc), 1));
             // Phase currents

@@ -97,6 +97,7 @@ Active development is on the `portable-cpp` branch of the fork
 * [x] Resolver frequency spike protection — output clamped to 200 Hz; individual candidate values ≥ 500 Hz discarded as implausible (previous value held); low-amplitude condition holds last known angle rather than jumping to 0, preventing `UpdateTurns()` from accumulating a false step
 * [x] ISR execution timing corrected — `execTicks` now measures each ISR invocation independently (was accumulating without reset); `s_maxExecTicks` tracks worst-case ISR duration; `s_adcOverflowCount` counts ADCA INT1 overflow events, confirming whether tasks are blocking ADC servicing
 * [x] Extended diagnostic CAN logging — resolver window diagnostics (`absTurns`, `maxDiff`, `samples`) logged alongside ISR timing (`execTicks`, `maxExecTicks`, `overflows`) and motor speed; enables in-the-field spike diagnosis without JTAG
+* [x] HVIL software protection (5.15.R) — startup qualification, latched fault, PWM Trip-Zone shutdown, and portable regression check; hardware validation pending
 
 ### In Progress
 * [ ] Motor tuning under load — slip frequency and ampnom calibration at higher currents; hardware testing with fully corrected resolver timing pending
@@ -104,10 +105,10 @@ Active development is on the `portable-cpp` branch of the fork
 * [ ] Inverter heating under load — deadtime and switching loss investigation needed at higher power levels
 * [ ] Vehicle control loop — throttle and direction via CAN for in-vehicle use
 * [ ] Battery testing — higher current testing planned with 2× 13S LiPo in series (~96 V, high current)
+* [ ] HVIL bench validation — calibrate the current window and measure shutdown/restart behaviour on FDU and RDU hardware
 
 ### Not Yet Started
 * [ ] CAN firmware upgrade over openinverter CAN protocol
-* [ ] HVIL software integration (fault detection, safe-state on loop open)
 * [ ] Extended hardware validation with motor running under sustained load
 * [ ] Front drive unit (SINE/induction) hardware validation under load
 * [ ] Vehicle integration testing
@@ -184,9 +185,15 @@ Both the HV connector HVIL pins and LV connector pins 4/23 must be in the loop s
 * Unit: 1 ADC count ≈ 0.1875 mA (3.3V ref, ADCA IN5, scaling resistor network on board)
 * When the loop is closed, the HV discharge resistors turn off (visible as a change in quiescent current)
 
+## HVIL Software Protection
+
+C2000 PWM outputs require 100 ms of valid HVIL samples before they can be enabled. An out-of-range sample latches `HVIL`, forces all phase outputs low through ePWM Trip-Zone, and changes `opmode` to `Off`. Closing the loop, changing `tripmode`, or reinitialising PWM cannot clear the latch; use an explicit `oic cmd reset` after correcting the fault. Motor commands are zeroed at startup for both SINE and FOC.
+
+`hvilmin` and `hvilmax` are persistent calibration parameters, initially 10 and 30 mA. These are provisional software defaults requiring bench calibration. `hvilstate` reports `0=Qualifying`, `1=Ready`, or `2=Fault`. See [HVIL behaviour, tests, and bench acceptance](docs/HVIL.md).
+
 ## Compiling
 
-The build process runs on Linux or WSL2 (Ubuntu). Windows and macOS are not supported.
+Linux or WSL2 (Ubuntu) is the usual build environment. C2000 RAM builds were also verified on macOS arm64 with TI compiler 25.11.1.LTS and Unix Makefiles; see [validation details](docs/HVIL.md). Native Windows builds have not been verified.
 
 ### Install Build Tools
 
@@ -218,9 +225,11 @@ cmake --build build/host
 cd build/host && ./test/OpenInverterTest
 ```
 
+Run the HVIL check with `./test/HvilInterlockTest` in the same directory. CMake accepts `-DCONTROL=SINE` (default) or `-DCONTROL=FOC`; use separate build directories for each mode.
+
 Build for C2000 (FOC — rear drive unit):
 ```
-cmake --preset c2000
+cmake --preset c2000 -DCONTROL=FOC
 cmake --build build/c2000
 ```
 

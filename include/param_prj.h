@@ -17,15 +17,15 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#define VER 5.14.R
+#define VER 5.15.R
 
 /* Entries must be ordered as follows:
    1. Saveable parameters (id != 0)
    2. Temporary parameters (id = 0)
    3. Display values
  */
-//Next param id (increase when adding new parameter!): 171
-//Next value Id: 2049
+//Next param id (increase when adding new parameter!): 173
+//Next value Id: 2070
 /*              category     name         unit       min     max     default id */
 
 #define MOTOR_PARAMETERS_COMMON \
@@ -68,7 +68,9 @@
     PARAM_ENTRY(CAT_INVERTER,udcgain,     "dig/V",   0,      4095L,  8.5625,  29  ) \
     PARAM_ENTRY(CAT_INVERTER,udcofs,      "dig",     0,      4095L,  0,      77  ) \
     PARAM_ENTRY(CAT_INVERTER,udclim,      "V",       0,      1000,   450,    48  ) \
-    PARAM_ENTRY(CAT_INVERTER,snshs,       SNS_HS,    0,      7,      0,      45  )
+    PARAM_ENTRY(CAT_INVERTER,snshs,       SNS_HS,    0,      7,      0,      45  ) \
+    PARAM_ENTRY(CAT_INVERTER,hvilmin,     "mA",      1,      100,    10,     171 ) \
+    PARAM_ENTRY(CAT_INVERTER,hvilmax,     "mA",      1,      100,    30,     172 )
 
 #define INVERTER_PARAMETERS_FOC \
     PARAM_ENTRY(CAT_INVERTER,pinswap,     SWAPS,     0,      15,     0,      109 )
@@ -193,6 +195,7 @@
     VALUE_ENTRY(upmp,        "V",     2065 ) \
     VALUE_ENTRY(pmprev,      "rpm",   2066 ) \
     VALUE_ENTRY(hvilcur,     "mA",    2068 ) \
+    VALUE_ENTRY(hvilstate,   HVILSTATES,2069 ) \
     VALUE_ENTRY(cpuload,     "%",     2035 ) \
 
 #define VALUES_SINE \
@@ -265,6 +268,7 @@
 #define IDLEMODS     "0=always, 1=nobrake, 2=cruise, 3=off"
 #define ONOFF        "0=Off, 1=On, 2=na"
 #define OKERR        "0=Error, 1=Ok, 2=na"
+#define HVILSTATES   "0=Qualifying, 1=Ready, 2=Fault"
 #define CHARGEMODS   "0=Off, 3=Boost, 4=Buck"
 #define ENCMODES     "0=Single, 1=AB, 2=ABZ, 3=SPI, 4=Resolver, 5=SinCos"
 #define POTMODES     "0=SingleRegen, 1=DualChannel, 2=CAN, 3=CANDual"

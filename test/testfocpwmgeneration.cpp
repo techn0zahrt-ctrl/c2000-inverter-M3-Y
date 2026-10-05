@@ -59,6 +59,10 @@ protected:
         ErrorMessage::SetTime(1);
         EXPECT_EQ(ErrorMessage::GetLastError(), ERROR_NONE);
         Param::LoadDefaults();
+        // Keep the fixture's 4.7 dig/A, 100 A reference independent of calibration.
+        Param::Set(Param::il1gain, FP_FROMFLT(4.7));
+        Param::Set(Param::il2gain, FP_FROMFLT(4.7));
+        Param::Set(Param::ocurlim, FP_FROMINT(100));
     }
 };
 

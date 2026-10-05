@@ -41,7 +41,7 @@ static constexpr float SineAmp = 1024;
 
 constexpr uint16_t RadToRev(float angle)
 {
-    return SINLU_ONEREV * (angle / (2 * pi));
+    return static_cast<uint16_t>(static_cast<int32_t>(SINLU_ONEREV * (angle / (2 * pi))));
 }
 
 //! Test sine at various angles
