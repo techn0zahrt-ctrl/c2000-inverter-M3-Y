@@ -148,6 +148,13 @@ The script opens the adapter in normal (active) mode so the PCAN hardware sends 
 
 **Control protocol** (ID `0x7FE`): byte 0 = command (`0x01` start, `0x00` stop), byte 1 = interval in 100 ms units. **Log channel** (ID `0x7FF`): ASCII text in 8-byte null-padded frames; a null byte signals end-of-message.
 
+Messages whose length is a multiple of 8 end with an additional zero-filled frame, so the receiver can display them without waiting for another message. Empty strings produce no frames. `CanLoggerTest` checks framing and reassembly against the production sender without a CAN adapter:
+
+```sh
+cmake --build build/host --target CanLoggerTest
+ctest --test-dir build/host/test -R '^CanLoggerTest$' --output-on-failure
+```
+
 **Debug output** includes: gate driver status, PMIC status registers, DC link voltage, phase currents, resolver angle, HVIL current, all 6 temperature channels, and CPU load. Compile with `-DUSE_CIO_DEBUG` to redirect output to CIO printf over JTAG instead.
 
 ## HVIL Wiring
