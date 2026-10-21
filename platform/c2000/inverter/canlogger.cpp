@@ -167,14 +167,15 @@ private:
  */
 void CanLogger::Print(const char* msg)
 {
-    if (!s_can || !msg || !s_enabled)
+    if (!s_can || !msg || !s_enabled || !*msg)
         return;
 
-    while (*msg)
+    int i;
+    do
     {
         uint32_t data[2] = {0U, 0U};
 
-        int i = 0;
+        i = 0;
         while (i < 4 && msg[i] != '\0')
         {
             data[0] |= ((uint32_t)(unsigned char)msg[i]) << (i * 8);
@@ -188,7 +189,7 @@ void CanLogger::Print(const char* msg)
         msg += i;
 
         s_can->Send(CAN_LOG_ID, data, 8);
-    }
+    } while (i == 8); // A full final frame needs a separate null terminator.
 }
 
 /**

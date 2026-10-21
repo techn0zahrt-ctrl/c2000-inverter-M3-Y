@@ -11,6 +11,12 @@ FetchContent_MakeAvailable(googletest)
 
 enable_testing()
 
+add_executable(CanLoggerTest testcanlogger.cpp
+  ../platform/c2000/inverter/canlogger.cpp)
+target_include_directories(CanLoggerTest PRIVATE ../platform/c2000/inverter)
+target_link_libraries(CanLoggerTest PRIVATE global_options libopeninv link_last)
+add_test(NAME CanLoggerTest COMMAND CanLoggerTest)
+
 # Unit test the library
 file(
   GLOB
